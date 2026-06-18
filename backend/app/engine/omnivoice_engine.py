@@ -267,6 +267,12 @@ class OmniVoiceEngine:
             "PYTORCH_MPS_HIGH_WATERMARK_RATIO",
             str(self._mps_high_watermark_ratio),
         )
+        # PyTorch requires low <= high; its default low watermark (1.4) exceeds
+        # any cap below 1.4 and aborts with "invalid low watermark ratio". Pin
+        # the low watermark to the resolved high value so the invariant holds
+        # even if the high ratio was overridden via env.
+        high = os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"]
+        os.environ.setdefault("PYTORCH_MPS_LOW_WATERMARK_RATIO", high)
 
     @staticmethod
     def _release_device_memory(torch) -> None:
