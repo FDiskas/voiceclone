@@ -173,7 +173,17 @@ jobs:
           projectPath: frontend
           tagName: ${{ github.ref_name }}
           releaseName: "VoiceClone ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download and install VoiceClone."
+          releaseBody: |
+            Download the asset for your platform below.
+
+            ### macOS install
+            VoiceClone is **not code-signed**, so macOS Gatekeeper will block it on first launch ("VoiceClone is damaged" / "can't be opened"). This is expected. After dragging **VoiceClone.app** to Applications, run this once in Terminal:
+
+            ```sh
+            xattr -dr com.apple.quarantine /Applications/VoiceClone.app
+            ```
+
+            Then open the app normally. (Alternatively: System Settings → Privacy & Security → "Open Anyway".)
           releaseDraft: true
           prerelease: false
           # Appends the Windows signing override only when it was prepared above.
