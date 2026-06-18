@@ -20,9 +20,6 @@ jobs:
           - platform: macos-14 # Apple Silicon
             target: aarch64-apple-darwin
             args: "--target aarch64-apple-darwin"
-          - platform: macos-13 # Intel
-            target: x86_64-apple-darwin
-            args: "--target x86_64-apple-darwin"
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             args: ""
@@ -33,6 +30,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # The runner's system disk (~14 GB free) is tight once torch + Rust
+      # artifacts pile up. Reclaim ~25 GB by dropping preinstalled toolchains
+      # we don't use, so the bundle has room.
+      - name: Free up disk space
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /usr/local/share/boost "${AGENT_TOOLSDIRECTORY:-}"
+          sudo docker image prune --all --force || true
+          df -h /
 
       # System libraries Tauri needs to build on Linux.
       - name: Install Linux build dependencies
@@ -54,7 +62,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -84,9 +92,19 @@ jobs:
           EXTRA_COLLECT: "torch torchaudio omnivoice faster_whisper"
         run: |
           python -m pip install --upgrade pip
+          # On Linux/Windows the default torch wheel bundles the full CUDA
+          # stack (multi-GB) — too big for the runner disk and pointless for a
+          # portable desktop app. Install CPU-only torch first so the extras
+          # below find it already satisfied. macOS wheels are CPU/MPS-only.
+          if [ "$RUNNER_OS" != "macOS" ]; then
+            pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          fi
           pip install -e ".[omnivoice,whisper]"
           pip install pyinstaller
           ./build_sidecar.sh
+          # The binary is already copied to the sidecar dir; drop the large
+          # PyInstaller intermediates to free disk for the Rust build.
+          rm -rf build dist
 
       - name: Install frontend dependencies
         working-directory: frontend
