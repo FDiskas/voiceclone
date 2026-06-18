@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/api/client.ts","./src/api/types.ts","./src/audio/streamingplayer.ts","./src/components/audiosource.tsx","./src/components/createprofile.tsx","./src/components/profilelist.tsx","./src/components/synthesize.tsx","./src/hooks/useprofiles.ts","./src/hooks/userecorder.ts"],"version":"5.9.3"}

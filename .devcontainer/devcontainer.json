@@ -1,0 +1,38 @@
+{
+  "name": "voiceclone-dev",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "containerEnv": {
+    "VOICECLONE_DEVCONTAINER": "1"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "stable",
+      "profile": "minimal"
+    }
+  },
+  "forwardPorts": [5173, 8000],
+  "portsAttributes": {
+    "5173": { "label": "frontend (vite)" },
+    "8000": { "label": "backend (fastapi)" }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "rust-lang.rust-analyzer",
+        "tauri-apps.tauri-vscode",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}

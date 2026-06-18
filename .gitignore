@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+backend/data/
+backend/.env
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.env
+
+# Tauri
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+frontend/src-tauri/binaries/voiceclone-backend-*
+
+# PyInstaller
+backend/build/
+backend/dist/
+backend/*.spec
+
+# OS / editor
+.DS_Store
