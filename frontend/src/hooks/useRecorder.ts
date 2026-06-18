@@ -37,8 +37,19 @@ export function useRecorder(): Recorder {
       recorder.start();
       recorderRef.current = recorder;
       setIsRecording(true);
-    } catch {
-      setError("Microphone access was denied or is unavailable.");
+    } catch (err) {
+      // getUserMedia rejects with a DOMException whose name tells us why, so we
+      // can guide the user instead of showing one catch-all message.
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setError(
+          "Microphone access was denied. Grant VoiceClone microphone access in System Settings → Privacy & Security → Microphone, then try again.",
+        );
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setError("No microphone was found. Connect a microphone and try again.");
+      } else {
+        setError("Could not start recording: " + (err instanceof Error ? err.message : String(err)));
+      }
     }
   }, []);
 

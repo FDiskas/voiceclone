@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the generated macOS Info.plist by Tauri. The usage string is
+     required for WKWebView's getUserMedia to prompt for the microphone; without
+     it macOS denies access outright. -->
+<plist version="1.0">
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>VoiceClone needs microphone access to record audio for voice cloning.</string>
+  </dict>
+</plist>

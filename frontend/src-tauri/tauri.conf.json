@@ -34,6 +34,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/voiceclone-backend"]
+    "externalBin": ["binaries/voiceclone-backend"],
+    "macOS": {
+      "entitlements": "Entitlements.plist"
+    }
   }
 }
