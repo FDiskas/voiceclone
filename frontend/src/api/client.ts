@@ -11,7 +11,7 @@ import type {
 //  - Inside the Tauri desktop shell the UI is served over a custom protocol,
 //    so relative URLs won't reach the backend — target the sidecar directly.
 //  - Otherwise use same-origin relative URLs (Vite proxy in dev).
-const API_BASE = resolveApiBase();
+export const API_BASE = resolveApiBase();
 
 function resolveApiBase(): string {
   if (import.meta.env.VITE_API_BASE) return import.meta.env.VITE_API_BASE;

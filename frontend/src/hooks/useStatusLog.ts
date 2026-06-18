@@ -18,7 +18,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const HEALTH_URL = "/api/health";
+import { API_BASE } from "../api/client";
+
+const HEALTH_URL = `${API_BASE}/api/health`;
 const POLL_MS = 2_000;
 const MAX_ENTRIES = 200;
 

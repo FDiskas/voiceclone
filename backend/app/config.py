@@ -33,8 +33,16 @@ class Settings(BaseSettings):
     # Storage.
     data_dir: Path = Field(default_factory=_default_data_dir)
 
-    # CORS origins for the Vite dev server.
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # CORS origins allowed to call the API.
+    # - Vite dev server (browser-based dev workflow)
+    # - tauri://localhost  – macOS / Linux Tauri webview origin (production)
+    # - https://tauri.localhost – Windows Tauri webview origin (production)
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "tauri://localhost",
+        "https://tauri.localhost",
+    ]
 
     @property
     def db_path(self) -> Path:
