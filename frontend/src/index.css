@@ -22,7 +22,7 @@ body {
 .app {
   max-width: 980px;
   margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
+  padding: 2rem 1.25rem 6rem;
 }
 
 header h1 {
@@ -298,4 +298,213 @@ audio {
 
 .checkbox input {
   width: auto;
+}
+
+/* ── Status bar ──────────────────────────────────── */
+
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.status-bar__drawer {
+  pointer-events: all;
+  background: #11141d;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  animation: drawer-in 0.18s ease;
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.status-bar__drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 1rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.status-bar__drawer-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.status-bar__drawer-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.status-bar__action-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.status-bar__action-btn:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.status-bar__log-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.3rem 0;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.72rem;
+  scroll-behavior: smooth;
+}
+
+.status-bar__log-empty {
+  display: block;
+  padding: 0.75rem 1rem;
+  color: var(--muted);
+}
+
+.status-bar__log-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.18rem 1rem;
+  line-height: 1.5;
+  transition: background 0.1s;
+}
+
+.status-bar__log-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.status-bar__log-row--info {
+  color: #c8d0e0;
+}
+
+.status-bar__log-row--warn {
+  color: #f5c76e;
+}
+
+.status-bar__log-row--error {
+  color: #ff8585;
+}
+
+.status-bar__log-icon {
+  flex-shrink: 0;
+  width: 0.9rem;
+  text-align: center;
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+
+.status-bar__log-time {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-bar__log-msg {
+  word-break: break-all;
+}
+
+/* The clickable strip at the very bottom */
+.status-bar__strip {
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  height: 24px;
+  background: #0d0f18;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.15s;
+}
+
+.status-bar__strip:hover {
+  background: #13161f;
+}
+
+/* Dot indicator */
+.status-bar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-bar__dot--connecting {
+  background: var(--muted);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.status-bar__dot--ok {
+  background: #4ade80;
+  box-shadow: 0 0 5px rgba(74, 222, 128, 0.6);
+}
+
+.status-bar__dot--error {
+  background: var(--danger);
+  box-shadow: 0 0 5px rgba(255, 107, 107, 0.5);
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.status-bar__label {
+  color: var(--muted);
+}
+
+.status-bar__inline-error {
+  color: var(--danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.status-bar__count {
+  background: var(--border);
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.status-bar__chevron {
+  margin-left: auto;
+  font-size: 0.65rem;
+  color: var(--muted);
 }

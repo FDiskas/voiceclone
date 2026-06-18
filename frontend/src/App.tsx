@@ -4,13 +4,16 @@ import { CreateProfile } from "./components/CreateProfile";
 import { ModelManager } from "./components/ModelManager";
 import { ModelStatusBanner } from "./components/ModelStatusBanner";
 import { ProfileList } from "./components/ProfileList";
+import { StatusBar } from "./components/StatusBar";
 import { Synthesize } from "./components/Synthesize";
 import { useEngineStatus } from "./hooks/useEngineStatus";
 import { useProfiles } from "./hooks/useProfiles";
+import { useStatusLog } from "./hooks/useStatusLog";
 
 export default function App() {
   const { profiles, loading, error, refresh, remove } = useProfiles();
   const { status: engineStatus, refresh: refreshEngine } = useEngineStatus();
+  const { connStatus, logs, clearLogs } = useStatusLog();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
@@ -54,6 +57,8 @@ export default function App() {
           )}
         </section>
       </main>
+
+      <StatusBar connStatus={connStatus} logs={logs} clearLogs={clearLogs} />
     </div>
   );
 }
