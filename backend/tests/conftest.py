@@ -12,7 +12,7 @@ from app.transcription.fake_transcriber import FakeTranscriber
 
 
 def _fake_normalizer(source: Path, destination: Path) -> Path:
-    """Skip ffmpeg in tests: just persist the bytes at the destination."""
+    """Skip real normalization in tests: just persist the bytes at the destination."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(source.read_bytes())
     return destination

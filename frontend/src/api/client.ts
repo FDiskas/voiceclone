@@ -5,6 +5,7 @@ import type {
   Profile,
   SynthesizeInput,
 } from "./types";
+import { toUploadAudio } from "./audio";
 
 // Resolve where the API lives:
 //  - VITE_API_BASE wins if set (explicit override).
@@ -57,10 +58,11 @@ export async function listProfiles(): Promise<Profile[]> {
 }
 
 export async function createProfile(input: CreateProfileInput): Promise<Profile> {
+  const { data, filename } = await toUploadAudio(input.audio);
   const form = new FormData();
   form.append("name", input.name);
   form.append("language", input.language);
-  form.append("audio", input.audio, "recording.webm");
+  form.append("audio", data, filename);
   if (input.transcript?.trim()) form.append("transcript", input.transcript);
 
   const response = await fetch(`${API_BASE}/api/profiles`, { method: "POST", body: form });
@@ -145,8 +147,9 @@ function copyFrom(src: Uint8Array, start: number): Uint8Array {
 }
 
 export async function transcribe(audio: Blob, language?: string): Promise<string> {
+  const { data, filename } = await toUploadAudio(audio);
   const form = new FormData();
-  form.append("audio", audio, "recording.webm");
+  form.append("audio", data, filename);
   if (language) form.append("language", language);
 
   const response = await fetch(`${API_BASE}/api/transcribe`, { method: "POST", body: form });

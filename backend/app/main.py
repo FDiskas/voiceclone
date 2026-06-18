@@ -21,7 +21,7 @@ from .api.dependencies import get_voice_engine
 from .engine.readiness import warm_up
 
 _ERROR_STATUS: dict[type[DomainError], int] = {
-    ValidationError: status.HTTP_422_UNPROCESSABLE_ENTITY,
+    ValidationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     ProfileNotFoundError: status.HTTP_404_NOT_FOUND,
     AudioConversionError: status.HTTP_400_BAD_REQUEST,
     SynthesisError: status.HTTP_502_BAD_GATEWAY,

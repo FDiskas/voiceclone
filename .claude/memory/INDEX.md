@@ -5,11 +5,13 @@
 - [overview](project/overview.md) — registration-free voice-clone web app: React/Vite + FastAPI + OmniVoice, SQLite+files, Tauri desktop later. keywords: goals, stack, scope, omnivoice
 - [omnivoice-api](project/omnivoice-api.md) — k2-fsa/OmniVoice real API: zero-shot, generate(text,ref_audio,ref_text), 24kHz, no language arg; streaming=sentence-chunking; whisper auto-transcribe. keywords: omnivoice, tts, api, generate, zero-shot, streaming, whisper
 - [dev-environment](project/dev-environment.md) — ALWAYS verify you're inside the dev container before running any command; if not, ask first. Toolchains live in .devcontainer. keywords: devcontainer, environment-check, before-running, confirm, ffmpeg, rust, tauri
+- [tauri-backend-lifecycle](project/tauri-backend-lifecycle.md) — Tauri must stop backend on close, and on launch reuse a running backend (via /api/health) or start new. keywords: tauri, backend, lifecycle, spawn, shutdown, single-instance, reuse
 
 ## decisions/
 
 - [stack-choices](decisions/stack-choices.md) — why FastAPI + SQLite + Tauri were chosen over alternatives. keywords: decisions, fastapi, sqlite, tauri, electron
 - [frontend-package-manager](decisions/frontend-package-manager.md) — frontend uses pnpm, not npm (npm 11 can't install @tauri-apps/cli). keywords: pnpm, npm, tauri, install
+- [ffmpeg-not-avconv](decisions/ffmpeg-not-avconv.md) — NO system ffmpeg dep: WebView decodes to PCM wav (convertToWav), backend reads via soundfile + torchaudio resample, faster-whisper uses PyAV. Never reintroduce ffmpeg/pydub/avconv. keywords: ffmpeg, avconv, pydub, soundfile, pyav, webaudio, convertToWav
 
 ## developer/
 

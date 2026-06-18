@@ -50,9 +50,11 @@ transcriber sits behind a `Transcriber` interface with a `fake` default and a
 
 - Python ≥ 3.10
 - Node ≥ 18 and [pnpm](https://pnpm.io/) (`corepack enable pnpm`)
-- [`ffmpeg`](https://ffmpeg.org/) on your `PATH` (used to normalize uploaded /
-  recorded audio to 24 kHz mono wav)
 - For the desktop build only: [Rust](https://rustup.rs/) and PyInstaller
+
+No system `ffmpeg` is required: the WebView decodes recordings/uploads to PCM wav
+before upload, the backend reads wav via `soundfile` (bundled libsndfile), and
+faster-whisper decodes via bundled PyAV.
 
 ## Backend
 
