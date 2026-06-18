@@ -74,9 +74,22 @@ fn try_spawn_backend(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             )
         })?;
 
+    // Pin a stable, per-user data directory so the SQLite DB and reference
+    // audio survive restarts. Without this the backend defaults to a path
+    // derived from __file__, which in the PyInstaller --onefile bundle is the
+    // temp extraction dir — wiped every launch, so profiles vanish and their
+    // stored absolute audio paths 404.
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not resolve app data directory: {e}"))?;
+    fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("Could not create data directory: {e}"))?;
+
     let (rx, child) = sidecar
         .env("VOICECLONE_ENGINE", engine)
         .env("VOICECLONE_TRANSCRIBER", transcriber)
+        .env("VOICECLONE_DATA_DIR", data_dir.to_string_lossy().to_string())
         // The backend watches this PID and self-exits if we die, so the
         // PyInstaller --onefile server child can't be orphaned when the
         // bootloader we hold is killed.
@@ -150,9 +163,19 @@ fn kill_backend(app: &tauri::AppHandle) {
     }
 }
 
+/// Write raw bytes to an absolute path the user picked via the save dialog.
+/// WKWebView ignores programmatic `<a download>` clicks, so the frontend routes
+/// audio downloads through this command instead.
+#[tauri::command]
+fn save_file(path: String, contents: Vec<u8>) -> Result<(), String> {
+    std::fs::write(&path, &contents).map_err(|e| format!("Could not save file: {e}"))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![save_file])
         .manage(Backend(Mutex::new(None)))
         .manage(SpawnError(Mutex::new(None)))
         .setup(|app| {

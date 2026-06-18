@@ -14,6 +14,7 @@
 - [mps-memory-synthesis](decisions/mps-memory-synthesis.md) — synthesis OOM crashed macOS; fixed via float16-on-mps, empty_cache between sentences, serialized generation, 0.8 MPS watermark cap. keywords: mps, oom, crash, float16, synthesis, apple-silicon, performance
 - [ffmpeg-not-avconv](decisions/ffmpeg-not-avconv.md) — NO system ffmpeg dep: WebView decodes to PCM wav (convertToWav), backend reads via soundfile + torchaudio resample, faster-whisper uses PyAV. Never reintroduce ffmpeg/pydub/avconv. keywords: ffmpeg, avconv, pydub, soundfile, pyav, webaudio, convertToWav
 - [macos-unsigned-quarantine](decisions/macos-unsigned-quarantine.md) — app ships UNSIGNED; quarantine can't be stripped in CI (added client-side on download); users run xattr or "Open Anyway". keywords: macos, codesign, notarization, quarantine, gatekeeper, xattr, unsigned
+- [tauri-packaging-gotchas](decisions/tauri-packaging-gotchas.md) — backend data dir must come from Tauri app_data_dir (onefile __file__ is ephemeral → 404/no persistence); downloads need native save (WKWebView ignores <a download>). keywords: tauri, pyinstaller, onefile, data_dir, persistence, 404, download, wkwebview, save
 
 ## developer/
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { synthesize, synthesizeStream } from "../api/client";
-import { concatWavChunks, triggerDownload } from "../api/audio";
+import { concatWavChunks, saveBlob } from "../api/audio";
 import type { Profile } from "../api/types";
 import { StreamingAudioPlayer } from "../audio/streamingPlayer";
 
@@ -14,6 +14,7 @@ export function Synthesize({ profile }: Props) {
   const [speed, setSpeed] = useState(1.0);
   const [streaming, setStreaming] = useState(true);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [autoPlay, setAutoPlay] = useState(false);
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,13 +36,18 @@ export function Synthesize({ profile }: Props) {
     }
   };
 
-  const playWhole = async () => {
-    const blob = await synthesize(profile.id, { text, speed });
-    setDownloadBlob(blob);
+  const showPlayer = (blob: Blob, play: boolean) => {
+    setAutoPlay(play);
     setAudioUrl((previous) => {
       if (previous) URL.revokeObjectURL(previous);
       return URL.createObjectURL(blob);
     });
+  };
+
+  const playWhole = async () => {
+    const blob = await synthesize(profile.id, { text, speed });
+    setDownloadBlob(blob);
+    showPlayer(blob, true);
   };
 
   const playStreamed = async () => {
@@ -58,11 +64,15 @@ export function Synthesize({ profile }: Props) {
     } finally {
       void player.close();
     }
-    setDownloadBlob(concatWavChunks(chunks));
+    const blob = concatWavChunks(chunks);
+    setDownloadBlob(blob);
+    // Surface a player for the assembled clip so it can be replayed/scrubbed.
+    // No autoplay — it already played live as it streamed.
+    if (blob) showPlayer(blob, false);
   };
 
   const handleDownload = () => {
-    if (downloadBlob) triggerDownload(downloadBlob, `${profile.name}.wav`);
+    if (downloadBlob) void saveBlob(downloadBlob, `${profile.name}.wav`);
   };
 
   return (
@@ -104,7 +114,7 @@ export function Synthesize({ profile }: Props) {
         {busy ? "Synthesizing…" : "Generate speech"}
       </button>
 
-      {audioUrl && <audio controls autoPlay src={audioUrl} />}
+      {audioUrl && <audio controls autoPlay={autoPlay} src={audioUrl} />}
 
       {downloadBlob && (
         <button type="button" className="link" onClick={handleDownload}>

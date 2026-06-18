@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { fetchProfileAudio } from "../api/client";
-import { triggerDownload } from "../api/audio";
+import { saveBlob } from "../api/audio";
 import type { Profile } from "../api/types";
 
 interface Props {
@@ -22,7 +22,7 @@ export function ProfileList({ profiles, selectedId, onSelect, onDelete }: Props)
     setDownloadingId(profile.id);
     try {
       const blob = await fetchProfileAudio(profile.id);
-      triggerDownload(blob, `${profile.name}.wav`);
+      await saveBlob(blob, `${profile.name}.wav`);
     } catch {
       // A listed profile almost always has its audio on disk; stay quiet
       // rather than add per-row error chrome.

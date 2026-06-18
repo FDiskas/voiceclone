@@ -183,15 +183,15 @@ make the build heavy (multi-GB installers, longer builds).
 
 ## API
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| `GET`  | `/api/health` | Liveness + active engine |
-| `GET`  | `/api/engine/status` | Engine readiness: `state` (idle/downloading/loading/ready/error), `message`, `progress` (0–1 or null), `detail` |
-| `POST` | `/api/engine/warmup` | Begin loading the model now (idempotent); returns the current status |
-| `DELETE` | `/api/engine/model` | Delete the downloaded model (reclaim disk; re-downloads when next needed) |
-| `GET`  | `/api/profiles` | List profiles |
-| `POST` | `/api/profiles` | Create profile (multipart: name, language, audio, optional transcript) |
-| `DELETE` | `/api/profiles/{id}` | Delete a profile |
-| `POST` | `/api/profiles/{id}/speech` | Synthesize text → `audio/wav` (json: text, speed) |
-| `POST` | `/api/profiles/{id}/speech/stream` | Stream sentence chunks → length-prefixed wav frames |
-| `POST` | `/api/transcribe` | Transcribe a clip → `{ text }` (multipart: audio, optional language) |
+| Method   | Path                               | Purpose                                                                                                         |
+| -------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/health`                      | Liveness + active engine                                                                                        |
+| `GET`    | `/api/engine/status`               | Engine readiness: `state` (idle/downloading/loading/ready/error), `message`, `progress` (0–1 or null), `detail` |
+| `POST`   | `/api/engine/warmup`               | Begin loading the model now (idempotent); returns the current status                                            |
+| `DELETE` | `/api/engine/model`                | Delete the downloaded model (reclaim disk; re-downloads when next needed)                                       |
+| `GET`    | `/api/profiles`                    | List profiles                                                                                                   |
+| `POST`   | `/api/profiles`                    | Create profile (multipart: name, language, audio, optional transcript)                                          |
+| `DELETE` | `/api/profiles/{id}`               | Delete a profile                                                                                                |
+| `POST`   | `/api/profiles/{id}/speech`        | Synthesize text → `audio/wav` (json: text, speed)                                                               |
+| `POST`   | `/api/profiles/{id}/speech/stream` | Stream sentence chunks → length-prefixed wav frames                                                             |
+| `POST`   | `/api/transcribe`                  | Transcribe a clip → `{ text }` (multipart: audio, optional language)                                            |

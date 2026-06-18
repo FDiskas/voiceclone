@@ -70,8 +70,30 @@ function writeString(view: DataView, offset: number, str: string): void {
   for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
 }
 
-/** Trigger a browser/webview download of a blob under `filename`. */
-export function triggerDownload(blob: Blob, filename: string): void {
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/**
+ * Save a blob to disk under `filename`.
+ *
+ * In the Tauri desktop shell, WKWebView ignores programmatic `<a download>`
+ * clicks, so we open a native Save dialog and write the bytes via the
+ * `save_file` command. In a plain browser we fall back to the anchor click.
+ * Returns true if the file was saved, false if the user cancelled the dialog.
+ */
+export async function saveBlob(blob: Blob, filename: string): Promise<boolean> {
+  if (isTauri) {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const { invoke } = await import("@tauri-apps/api/core");
+    const path = await save({
+      defaultPath: filename,
+      filters: [{ name: "Audio", extensions: ["wav"] }],
+    });
+    if (!path) return false; // user cancelled
+    const contents = new Uint8Array(await blob.arrayBuffer());
+    await invoke("save_file", { path, contents: Array.from(contents) });
+    return true;
+  }
+
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -81,6 +103,7 @@ export function triggerDownload(blob: Blob, filename: string): void {
   anchor.remove();
   // Revoke after the click has been dispatched.
   setTimeout(() => URL.revokeObjectURL(url), 0);
+  return true;
 }
 
 /**
