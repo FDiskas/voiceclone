@@ -12,7 +12,7 @@ import { useStatusLog } from "./hooks/useStatusLog";
 
 export default function App() {
   const { profiles, loading, error, refresh, remove } = useProfiles();
-  const { status: engineStatus, refresh: refreshEngine } = useEngineStatus();
+  const { status: engineStatus, refresh: refreshEngine, retry: retryEngine } = useEngineStatus();
   const { connStatus, logs, clearLogs } = useStatusLog();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -30,7 +30,7 @@ export default function App() {
         <p className="muted">Record or upload a voice, then make it say anything — no sign-up.</p>
       </header>
 
-      <ModelStatusBanner status={engineStatus} />
+      <ModelStatusBanner status={engineStatus} onRetry={retryEngine} />
 
       <main>
         <section className="column">

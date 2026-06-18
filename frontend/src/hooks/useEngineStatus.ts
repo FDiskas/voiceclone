@@ -8,12 +8,22 @@ const POLL_INTERVAL_MS = 1500;
 export interface EngineStatusState {
   status: EngineStatus | null;
   refresh: () => Promise<void>;
+  retry: () => void;
 }
 
-// Polls the backend's engine readiness while the model is actively
-// downloading/loading and stops once it settles (ready/error/idle). `refresh`
-// re-fetches on demand (e.g. after deleting the model) and resumes polling if
-// the engine is busy again. Returns null status until the first poll lands.
+// Whether the engine is in a transient state that warrants continued polling.
+// "idle" is included because warm_up() fires at startup but the engine may
+// still be in "idle" for a brief moment before it transitions to "loading" or
+// "downloading" — stopping here would miss the entire progress window.
+function shouldKeepPolling(state: string): boolean {
+  return state === "downloading" || state === "loading" || state === "idle";
+}
+
+// Polls the backend's engine readiness while the model is actively becoming
+// ready (idle → downloading → loading → ready|error). Stops once the state
+// settles on "ready" or "error". `refresh` re-fetches on demand (e.g. after
+// deleting the model) and resumes polling if the engine is busy again.
+// `retry` restarts polling from an error state.
 export function useEngineStatus(): EngineStatusState {
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -24,13 +34,12 @@ export function useEngineStatus(): EngineStatusState {
       const next = await getEngineStatus();
       if (cancelled.current) return;
       setStatus(next);
-      // Keep polling only while the model is still becoming ready.
-      if (next.state === "downloading" || next.state === "loading") {
+      if (shouldKeepPolling(next.state)) {
         timer.current = setTimeout(tick, POLL_INTERVAL_MS);
       }
     } catch {
       if (cancelled.current) return;
-      // Backend not up yet (sidecar still starting) — retry.
+      // Backend not up yet (sidecar still starting) — keep retrying.
       timer.current = setTimeout(tick, POLL_INTERVAL_MS);
     }
   }, []);
@@ -38,6 +47,13 @@ export function useEngineStatus(): EngineStatusState {
   const refresh = useCallback(async () => {
     clearTimeout(timer.current);
     await tick();
+  }, [tick]);
+
+  // Restart polling from an error state (e.g. user clicks "Retry").
+  const retry = useCallback(() => {
+    clearTimeout(timer.current);
+    setStatus(null);
+    void tick();
   }, [tick]);
 
   useEffect(() => {
@@ -49,5 +65,5 @@ export function useEngineStatus(): EngineStatusState {
     };
   }, [tick]);
 
-  return { status, refresh };
+  return { status, refresh, retry };
 }

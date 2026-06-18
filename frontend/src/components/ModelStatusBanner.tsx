@@ -2,26 +2,50 @@ import type { EngineStatus } from "../api/types";
 
 interface Props {
   status: EngineStatus | null;
+  onRetry?: () => void;
 }
 
-// Shows a download/load indicator while the voice model becomes ready. Hidden
-// once ready/idle (the default `fake` dev engine reports ready instantly, so
-// this never appears in development). On first desktop launch the model is
-// fetched from Hugging Face, which can take several minutes.
-export function ModelStatusBanner({ status }: Props) {
-  if (!status) return null;
-
-  if (status.state === "error") {
+// Shows a download/load indicator while the voice model becomes ready.
+//
+// Visibility matrix:
+//   null (first poll not yet landed) → subtle "connecting" strip
+//   idle / loading / downloading     → progress banner (spinner + bar)
+//   ready                            → hidden (synthesis available)
+//   error                            → error banner with retry
+export function ModelStatusBanner({ status, onRetry }: Props) {
+  // Before the first poll lands show a minimal "connecting" hint so the
+  // user knows the app is doing something (previously this was blank).
+  if (!status) {
     return (
-      <div className="model-banner model-banner--error" role="alert">
-        <strong>Voice model failed to load.</strong>
-        {status.detail && <span className="muted">{status.detail}</span>}
+      <div className="model-banner model-banner--connecting" role="status" aria-live="polite">
+        <div className="model-banner__row">
+          <span className="model-banner__spinner" aria-hidden="true" />
+          <span>Connecting to backend…</span>
+        </div>
       </div>
     );
   }
 
-  if (status.state !== "downloading" && status.state !== "loading") return null;
+  if (status.state === "error") {
+    return (
+      <div className="model-banner model-banner--error" role="alert">
+        <div className="model-banner__row">
+          <strong>Voice model failed to load.</strong>
+          {status.detail && <span className="muted">{status.detail}</span>}
+          {onRetry && (
+            <button type="button" className="model-banner__retry" onClick={onRetry}>
+              Retry
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
+  // Hidden once ready — synthesis is available, no need to show anything.
+  if (status.state === "ready") return null;
+
+  // idle / downloading / loading — show progress bar.
   const pct = status.progress != null ? Math.round(status.progress * 100) : null;
   const indeterminate = pct == null;
 
