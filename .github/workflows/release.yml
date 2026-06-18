@@ -92,6 +92,38 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
+      # Export signing/notarization secrets to the environment ONLY when they
+      # are actually set. Tauri's bundler treats an empty-but-defined variable
+      # (e.g. APPLE_CERTIFICATE="") as "signing requested" and fails trying to
+      # import an empty certificate — so we must omit them entirely, not blank
+      # them. Absent secrets => no vars exported => unsigned build, no error.
+      - name: Configure code-signing environment
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          for var in \
+            APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+            APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID \
+            TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            value="${!var}"
+            if [ -n "$value" ]; then
+              # Multiline-safe write (base64 certs may contain newlines).
+              {
+                echo "$var<<__VC_EOF__"
+                echo "$value"
+                echo "__VC_EOF__"
+              } >> "$GITHUB_ENV"
+            fi
+          done
+
       # Windows code signing is configured via the bundler config (no env var),
       # so when the cert secret is present we import it and emit a one-off
       # --config override pointing tauri at its thumbprint. Skipped entirely
@@ -114,18 +146,11 @@ jobs:
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
+        # Signing/notarization vars (APPLE_*, TAURI_SIGNING_*) are injected by
+        # the "Configure code-signing environment" step above — and only when
+        # their secrets are set, so an unsigned build needs no configuration.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # --- macOS signing + notarization (empty = unsigned build) ---
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # --- Tauri auto-updater signing (only used if the updater is added) ---
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
           tagName: ${{ github.ref_name }}
