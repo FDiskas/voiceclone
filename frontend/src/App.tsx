@@ -34,7 +34,7 @@ export default function App() {
         <div className="app">
           <header>
             <h1>🎙️ VoiceClone</h1>
-            <p className="muted">Record or upload a voice, then make it say anything — no sign-up.</p>
+            <p className="muted">Record or upload a voice, then make it say anything.</p>
           </header>
 
           <ModelStatusBanner status={engineStatus} onRetry={retryEngine} />

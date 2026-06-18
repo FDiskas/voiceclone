@@ -22,8 +22,14 @@ class Settings(BaseSettings):
     # OmniVoice configuration (only used when engine == "omnivoice").
     model_id: str = "k2-fsa/OmniVoice"
     device: str = "auto"  # auto -> cuda / mps / cpu
-    dtype: str = "auto"  # auto -> float16 on gpu, float32 on cpu
+    dtype: str = "auto"  # auto -> float16 on gpu (cuda/mps), float32 on cpu
     num_step: int = 32
+
+    # Cap MPS memory usage so an oversized synthesis raises a clean OOM instead
+    # of starving macOS into a system-wide crash. Fraction of the recommended
+    # max working set; 0 disables the cap (PyTorch default is ~1.7x, which can
+    # over-commit unified memory). Only applied on Apple Silicon (mps).
+    mps_high_watermark_ratio: float = 0.8
 
     # Transcription: "fake" (placeholder) or "whisper" (faster-whisper).
     transcriber: str = "fake"
@@ -69,7 +75,11 @@ class Settings(BaseSettings):
     def resolved_dtype(self, device: str) -> str:
         if self.dtype != "auto":
             return self.dtype
-        return "float16" if device.startswith("cuda") else "float32"
+        # float16 on any GPU (CUDA or Apple MPS) — halves model + activation
+        # memory and is faster. float32 only on CPU, where fp16 is slow.
+        if device.startswith("cuda") or device == "mps":
+            return "float16"
+        return "float32"
 
     def resolved_whisper_device(self) -> str:
         # faster-whisper supports only "cpu"/"cuda"; map mps -> cpu.

@@ -32,17 +32,28 @@ _logger = logging.getLogger(__name__)
 class OmniVoiceEngine:
     """Wraps `omnivoice.OmniVoice` behind the VoiceEngine + WarmableEngine protocols."""
 
-    def __init__(self, model_id: str, device_map: str, dtype: str, num_step: int = 32) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        device_map: str,
+        dtype: str,
+        num_step: int = 32,
+        mps_high_watermark_ratio: float = 0.0,
+    ) -> None:
         self._model_id = model_id
         self._device_map = device_map
         self._dtype = dtype
         self._num_step = num_step
+        self._mps_high_watermark_ratio = mps_high_watermark_ratio
         self._model = None
 
         # Readiness state, guarded by `_state_lock`. `_load_lock` serialises the
         # actual (slow) load so a synthesis call and a warm-up can't load twice.
+        # `_infer_lock` serialises generation so concurrent requests can't stack
+        # multiple model passes in (unified/GPU) memory at once.
         self._state_lock = threading.Lock()
         self._load_lock = threading.Lock()
+        self._infer_lock = threading.Lock()
         self._warm_thread: threading.Thread | None = None
         self._state = STATE_IDLE
         self._message = "Voice model not loaded yet."
@@ -161,6 +172,7 @@ class OmniVoiceEngine:
                     "omnivoice is not installed. Run `pip install omnivoice` or use ENGINE=fake."
                 ) from exc
 
+            self._apply_mps_memory_cap()
             dtype = getattr(torch, self._dtype, torch.float32)
             _logger.info("Loading OmniVoice model %s on %s", self._model_id, self._device_map)
             self._mark(STATE_LOADING, "Preparing voice model…")
@@ -175,15 +187,53 @@ class OmniVoiceEngine:
 
     def synthesize(self, request: SynthesisRequest) -> SynthesisResult:
         model = self._load()
-        try:
-            audio = model.generate(
-                text=request.text,
-                ref_audio=str(request.reference_audio_path),
-                ref_text=request.reference_text,
-                num_step=self._num_step,
-                speed=request.speed,
-            )
-        except Exception as exc:  # noqa: BLE001 - surface any engine failure uniformly
-            raise SynthesisError(f"OmniVoice failed to synthesize: {exc}") from exc
+        import torch
+
+        # Serialise generation: two concurrent passes would stack their working
+        # set in (unified) memory and can OOM — on Apple Silicon hard enough to
+        # take the whole OS down. One synthesis at a time keeps peak bounded.
+        with self._infer_lock:
+            try:
+                # inference_mode is lighter than the default no_grad path: no
+                # autograd bookkeeping, so intermediates are freed eagerly.
+                with torch.inference_mode():
+                    audio = model.generate(
+                        text=request.text,
+                        ref_audio=str(request.reference_audio_path),
+                        ref_text=request.reference_text,
+                        num_step=self._num_step,
+                        speed=request.speed,
+                    )
+            except Exception as exc:  # noqa: BLE001 - surface any engine failure uniformly
+                raise SynthesisError(f"OmniVoice failed to synthesize: {exc}") from exc
+            finally:
+                # Return cached blocks to the allocator between sentences so a
+                # multi-sentence stream doesn't accumulate device memory.
+                self._release_device_memory(torch)
 
         return SynthesisResult(samples=audio[0], sample_rate=_OUTPUT_SAMPLE_RATE)
+
+    def _apply_mps_memory_cap(self) -> None:
+        """Cap MPS memory before the allocator initialises (first allocation).
+
+        Set via env because PyTorch reads it once when the MPS allocator starts.
+        `setdefault` so an explicit user override always wins.
+        """
+        if self._device_map != "mps" or self._mps_high_watermark_ratio <= 0:
+            return
+        import os
+
+        os.environ.setdefault(
+            "PYTORCH_MPS_HIGH_WATERMARK_RATIO",
+            str(self._mps_high_watermark_ratio),
+        )
+
+    @staticmethod
+    def _release_device_memory(torch) -> None:
+        try:
+            if torch.backends.mps.is_available() and hasattr(torch, "mps"):
+                torch.mps.empty_cache()
+            elif torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:  # noqa: BLE001 - best-effort cleanup, never fail a request
+            pass

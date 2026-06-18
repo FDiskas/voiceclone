@@ -71,6 +71,7 @@ def _build_omnivoice(settings: Settings) -> OmniVoiceEngine:
         device_map=device,
         dtype=settings.resolved_dtype(device),
         num_step=settings.num_step,
+        mps_high_watermark_ratio=settings.mps_high_watermark_ratio,
     )
 
 

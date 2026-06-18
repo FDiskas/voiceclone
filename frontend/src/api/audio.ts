@@ -70,6 +70,100 @@ function writeString(view: DataView, offset: number, str: string): void {
   for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
 }
 
+/** Trigger a browser/webview download of a blob under `filename`. */
+export function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Revoke after the click has been dispatched.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/**
+ * Concatenate streamed per-sentence WAV chunks (all identical 24 kHz mono
+ * 16-bit PCM from the backend) into one downloadable WAV — by splicing the raw
+ * `data` payloads under a single header, so no decode/resample loss.
+ */
+export function concatWavChunks(chunks: ArrayBuffer[]): Blob | null {
+  const parsed = chunks.map(parseWav).filter((p): p is ParsedWav => p !== null);
+  if (parsed.length === 0) return null;
+
+  const { sampleRate, channels, bitsPerSample } = parsed[0];
+  const totalDataLength = parsed.reduce((sum, p) => sum + p.data.byteLength, 0);
+
+  const bytesPerSample = bitsPerSample / 8;
+  const blockAlign = channels * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + totalDataLength);
+  const view = new DataView(buffer);
+
+  writeString(view, 0, "RIFF");
+  view.setUint32(4, 36 + totalDataLength, true);
+  writeString(view, 8, "WAVE");
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeString(view, 36, "data");
+  view.setUint32(40, totalDataLength, true);
+
+  const out = new Uint8Array(buffer);
+  let offset = 44;
+  for (const p of parsed) {
+    out.set(p.data, offset);
+    offset += p.data.byteLength;
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+interface ParsedWav {
+  sampleRate: number;
+  channels: number;
+  bitsPerSample: number;
+  data: Uint8Array;
+}
+
+/** Walk a WAV's RIFF chunks to extract fmt params + the data payload. */
+function parseWav(buf: ArrayBuffer): ParsedWav | null {
+  const view = new DataView(buf);
+  if (buf.byteLength < 12) return null;
+
+  let sampleRate = 24_000;
+  let channels = 1;
+  let bitsPerSample = 16;
+  let data: Uint8Array | null = null;
+
+  let offset = 12; // skip "RIFF"<size>"WAVE"
+  while (offset + 8 <= view.byteLength) {
+    const id = String.fromCharCode(
+      view.getUint8(offset),
+      view.getUint8(offset + 1),
+      view.getUint8(offset + 2),
+      view.getUint8(offset + 3),
+    );
+    const size = view.getUint32(offset + 4, true);
+    const body = offset + 8;
+    if (id === "fmt ") {
+      channels = view.getUint16(body + 2, true);
+      sampleRate = view.getUint32(body + 4, true);
+      bitsPerSample = view.getUint16(body + 14, true);
+    } else if (id === "data") {
+      data = new Uint8Array(buf, body, Math.min(size, view.byteLength - body));
+    }
+    offset = body + size + (size % 2); // chunks are word-aligned
+  }
+
+  return data ? { sampleRate, channels, bitsPerSample, data } : null;
+}
+
 /**
  * Best-effort conversion for upload: returns a WAV blob + filename, or falls
  * back to the original bytes if this WebView can't decode the input (e.g. an

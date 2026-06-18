@@ -89,7 +89,7 @@ jobs:
         shell: bash
         env:
           TRIPLE: ${{ matrix.target }}
-          EXTRA_COLLECT: "torch torchaudio omnivoice faster_whisper"
+          EXTRA_COLLECT: "torch torchaudio omnivoice faster_whisper hf_xet"
         run: |
           python -m pip install --upgrade pip
           # On Linux/Windows the default torch wheel bundles the full CUDA

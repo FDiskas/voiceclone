@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { synthesize, synthesizeStream } from "../api/client";
+import { concatWavChunks, triggerDownload } from "../api/audio";
 import type { Profile } from "../api/types";
 import { StreamingAudioPlayer } from "../audio/streamingPlayer";
 
@@ -13,12 +14,14 @@ export function Synthesize({ profile }: Props) {
   const [speed, setSpeed] = useState(1.0);
   const [streaming, setStreaming] = useState(true);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSpeak = async () => {
     setBusy(true);
     setError(null);
+    setDownloadBlob(null);
     try {
       if (streaming) {
         await playStreamed();
@@ -34,6 +37,7 @@ export function Synthesize({ profile }: Props) {
 
   const playWhole = async () => {
     const blob = await synthesize(profile.id, { text, speed });
+    setDownloadBlob(blob);
     setAudioUrl((previous) => {
       if (previous) URL.revokeObjectURL(previous);
       return URL.createObjectURL(blob);
@@ -43,13 +47,22 @@ export function Synthesize({ profile }: Props) {
   const playStreamed = async () => {
     setAudioUrl(null);
     const player = new StreamingAudioPlayer();
+    // Keep a copy of each chunk so we can offer the full clip for download —
+    // decodeAudioData in the player detaches the original buffer.
+    const chunks: ArrayBuffer[] = [];
     try {
       await synthesizeStream(profile.id, { text, speed }, (wav) => {
+        chunks.push(wav.slice(0));
         void player.enqueue(wav);
       });
     } finally {
       void player.close();
     }
+    setDownloadBlob(concatWavChunks(chunks));
+  };
+
+  const handleDownload = () => {
+    if (downloadBlob) triggerDownload(downloadBlob, `${profile.name}.wav`);
   };
 
   return (
@@ -92,6 +105,12 @@ export function Synthesize({ profile }: Props) {
       </button>
 
       {audioUrl && <audio controls autoPlay src={audioUrl} />}
+
+      {downloadBlob && (
+        <button type="button" className="link" onClick={handleDownload}>
+          ↓ Download audio
+        </button>
+      )}
     </div>
   );
 }

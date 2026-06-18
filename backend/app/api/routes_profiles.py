@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 
 from ..services.profile_service import ProfileService
 from .dependencies import get_profile_service
@@ -33,6 +34,22 @@ async def create_profile(
         original_filename=audio.filename or "recording.webm",
     )
     return ProfileResponse.from_entity(profile)
+
+
+@router.get("/{profile_id}/audio")
+def get_profile_audio(
+    profile_id: str, profiles: ProfileService = Depends(get_profile_service)
+) -> FileResponse:
+    """Serve the profile's normalized reference audio (24 kHz mono wav)."""
+    profile = profiles.get(profile_id)  # raises ProfileNotFoundError -> 404
+    path = profile.reference_audio_path
+    if not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Reference audio not found"
+        )
+    return FileResponse(
+        path, media_type="audio/wav", filename=f"{profile.name.value}.wav"
+    )
 
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)

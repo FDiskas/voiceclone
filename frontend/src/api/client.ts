@@ -70,6 +70,13 @@ export async function createProfile(input: CreateProfileInput): Promise<Profile>
   return response.json();
 }
 
+// Downloads the profile's stored reference audio (24 kHz mono wav).
+export async function fetchProfileAudio(id: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/api/profiles/${id}/audio`);
+  if (!response.ok) await readError(response);
+  return response.blob();
+}
+
 export async function deleteProfile(id: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/profiles/${id}`, { method: "DELETE" });
   if (!response.ok) await readError(response);

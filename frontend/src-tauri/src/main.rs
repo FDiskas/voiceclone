@@ -16,6 +16,46 @@ struct Backend(Mutex<Option<CommandChild>>);
 /// Stored in app state and emitted to the frontend once the window is ready.
 struct SpawnError(Mutex<Option<String>>);
 
+/// `host:port` the backend serves on (matches run_server.py's defaults).
+fn backend_addr() -> String {
+    let host = std::env::var("VOICECLONE_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = std::env::var("VOICECLONE_PORT").unwrap_or_else(|_| "8000".into());
+    format!("{host}:{port}")
+}
+
+/// Probe `GET /api/health` over a raw TCP connection (no HTTP-client dep) so we
+/// can reuse a backend that's already serving instead of spawning a duplicate.
+/// A closed port returns ConnectionRefused immediately, so this is cheap in the
+/// common (nothing-running) case.
+fn backend_already_running(addr: &str) -> bool {
+    use std::io::{Read, Write};
+    use std::net::{TcpStream, ToSocketAddrs};
+    use std::time::Duration;
+
+    let socket = match addr.to_socket_addrs().ok().and_then(|mut a| a.next()) {
+        Some(s) => s,
+        None => return false,
+    };
+    let mut stream = match TcpStream::connect_timeout(&socket, Duration::from_millis(400)) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(700)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(400)));
+
+    let request =
+        format!("GET /api/health HTTP/1.0\r\nHost: {addr}\r\nConnection: close\r\n\r\n");
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+
+    // The status line is all we need; cap the read so we never block on a body.
+    let mut buf = Vec::new();
+    let _ = stream.take(256).read_to_end(&mut buf);
+    let head = String::from_utf8_lossy(&buf);
+    head.starts_with("HTTP/") && head.contains(" 200")
+}
+
 fn try_spawn_backend(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     // The packaged app ships the real OmniVoice engine, so default the sidecar
     // to it (and to Whisper for transcription). A developer can still override
@@ -37,6 +77,10 @@ fn try_spawn_backend(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let (rx, child) = sidecar
         .env("VOICECLONE_ENGINE", engine)
         .env("VOICECLONE_TRANSCRIBER", transcriber)
+        // The backend watches this PID and self-exits if we die, so the
+        // PyInstaller --onefile server child can't be orphaned when the
+        // bootloader we hold is killed.
+        .env("VOICECLONE_PARENT_PID", std::process::id().to_string())
         .spawn()
         .map_err(|e| format!("Failed to start backend process: {e}"))?;
 
@@ -113,6 +157,16 @@ fn main() {
         .manage(SpawnError(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // Reuse a backend that's already serving (e.g. a dev server, or a
+            // prior instance) instead of spawning a duplicate on the same port.
+            // We don't own it, so kill_backend leaves it alone on exit.
+            let addr = backend_addr();
+            if backend_already_running(&addr) {
+                eprintln!("[VoiceClone] Reusing backend already running on {addr}");
+                return Ok(());
+            }
+
             match try_spawn_backend(&handle) {
                 Ok(child) => {
                     app.state::<Backend>().0.lock().unwrap().replace(child);

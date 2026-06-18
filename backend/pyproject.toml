@@ -19,10 +19,14 @@ omnivoice = [
     "omnivoice",
     "torch",
     "torchaudio",
+    # Faster weight downloads from Xet-backed HF repos (optional perf).
+    "hf_xet",
 ]
 # Whisper auto-transcription (optional; ENGINE-independent).
 whisper = [
     "faster-whisper>=1.0",
+    # Faster Whisper model downloads from Xet-backed HF repos (optional perf).
+    "hf_xet",
 ]
 dev = [
     "pytest>=8.0",
