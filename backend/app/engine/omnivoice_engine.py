@@ -26,6 +26,7 @@ from .readiness import (
 )
 
 _OUTPUT_SAMPLE_RATE = 24_000
+_PROMPT_CACHE_MAX = 16  # encoded references kept warm; tensors are tiny
 _logger = logging.getLogger(__name__)
 
 
@@ -54,6 +55,12 @@ class OmniVoiceEngine:
         self._state_lock = threading.Lock()
         self._load_lock = threading.Lock()
         self._infer_lock = threading.Lock()
+        # Reference encodings, reused across sentences/requests for the same
+        # profile. Building one re-reads + audio-tokenizes the reference, which
+        # `model.generate()` otherwise repeats on every call. Guarded by
+        # `_infer_lock` (built/read only inside the serialised generation
+        # section), so no separate lock is needed.
+        self._prompt_cache: "dict[tuple, object]" = {}
         self._warm_thread: threading.Thread | None = None
         self._state = STATE_IDLE
         self._message = "Voice model not loaded yet."
@@ -94,6 +101,10 @@ class OmniVoiceEngine:
         # Wait for any in-flight load to finish, then drop the in-memory model.
         with self._load_lock:
             self._model = None
+            # Prompts hold device tensors tied to the dropped model; clear them
+            # so the next load rebuilds against the fresh model/device context.
+            with self._infer_lock:
+                self._prompt_cache.clear()
             freed, found = self._purge_cache()
         with self._state_lock:
             self._state = STATE_IDLE
@@ -194,13 +205,15 @@ class OmniVoiceEngine:
         # take the whole OS down. One synthesis at a time keeps peak bounded.
         with self._infer_lock:
             try:
+                # Reuse the reference encoding across sentences/requests so the
+                # ref audio is tokenized once per profile, not once per call.
+                prompt = self._voice_clone_prompt(model, request)
                 # inference_mode is lighter than the default no_grad path: no
                 # autograd bookkeeping, so intermediates are freed eagerly.
                 with torch.inference_mode():
                     audio = model.generate(
                         text=request.text,
-                        ref_audio=str(request.reference_audio_path),
-                        ref_text=request.reference_text,
+                        voice_clone_prompt=prompt,
                         num_step=self._num_step,
                         speed=request.speed,
                     )
@@ -212,6 +225,33 @@ class OmniVoiceEngine:
                 self._release_device_memory(torch)
 
         return SynthesisResult(samples=audio[0], sample_rate=_OUTPUT_SAMPLE_RATE)
+
+    def _voice_clone_prompt(self, model, request: SynthesisRequest):
+        """Get (or build and cache) the encoded reference for this profile.
+
+        `model.generate(ref_audio=...)` re-reads and re-tokenizes the reference
+        on every call; building a `VoiceClonePrompt` once and passing it back in
+        skips that. Keyed on path + mtime + ref_text so a recreated reference
+        invalidates naturally. Must be called under `_infer_lock`.
+        """
+        path = request.reference_audio_path
+        try:
+            mtime = path.stat().st_mtime_ns
+        except OSError:
+            mtime = None
+        key = (str(path), mtime, request.reference_text)
+        prompt = self._prompt_cache.get(key)
+        if prompt is None:
+            prompt = model.create_voice_clone_prompt(
+                ref_audio=str(path),
+                ref_text=request.reference_text,
+            )
+            # Bound the cache: references are tiny, but don't grow unboundedly
+            # as profiles come and go. Drop the oldest insertion on overflow.
+            if len(self._prompt_cache) >= _PROMPT_CACHE_MAX:
+                self._prompt_cache.pop(next(iter(self._prompt_cache)))
+            self._prompt_cache[key] = prompt
+        return prompt
 
     def _apply_mps_memory_cap(self) -> None:
         """Cap MPS memory before the allocator initialises (first allocation).
