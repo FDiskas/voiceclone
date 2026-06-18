@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,7 +16,9 @@ from .domain.errors import (
     SynthesisError,
     ValidationError,
 )
-from .api import routes_profiles, routes_synthesis, routes_transcription
+from .api import routes_engine, routes_profiles, routes_synthesis, routes_transcription
+from .api.dependencies import get_voice_engine
+from .engine.readiness import warm_up
 
 _ERROR_STATUS: dict[type[DomainError], int] = {
     ValidationError: status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -24,9 +28,18 @@ _ERROR_STATUS: dict[type[DomainError], int] = {
 }
 
 
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    # Begin loading the model at startup so the first-run download starts (and
+    # is reported) immediately, rather than blocking the first synthesis call.
+    # No-op for the fake engine, which is always ready.
+    warm_up(get_voice_engine())
+    yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="VoiceClone API", version="0.1.0")
+    app = FastAPI(title="VoiceClone API", version="0.1.0", lifespan=_lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -38,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_profiles.router)
     app.include_router(routes_synthesis.router)
     app.include_router(routes_transcription.router)
+    app.include_router(routes_engine.router)
 
     @app.exception_handler(DomainError)
     async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:

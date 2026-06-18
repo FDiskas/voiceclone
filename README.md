@@ -80,8 +80,13 @@ VOICECLONE_ENGINE=omnivoice
 VOICECLONE_DEVICE=auto           # cuda:0 / mps / cpu — auto-detected
 ```
 
-The model weights download from Hugging Face on first synthesis. On a Mac the
+The model weights download from Hugging Face on first run. On a Mac the
 engine runs on `mps`/`cpu` (float32); CUDA uses float16.
+
+The backend warms the model up at startup and reports progress via
+`GET /api/engine/status`, so the UI can show a download/load indicator on
+first launch instead of hanging on the first synthesis. The `fake` engine
+reports `ready` immediately, so the indicator never appears in dev.
 
 ### Enabling Whisper transcription
 
@@ -144,7 +149,24 @@ pnpm desktop:dev          # live dev with the sidecar
 Mac/Windows/Linux from one codebase. For an offline app, build the sidecar with
 the `omnivoice` (and optionally `whisper`) extras installed so the model loads
 locally — note the weights still download from Hugging Face on first run unless
-pre-cached.
+pre-cached. The desktop shell spawns the sidecar with `VOICECLONE_ENGINE=omnivoice`
+and `VOICECLONE_TRANSCRIBER=whisper` by default; export either var before
+launching `tauri dev` to override (e.g. `VOICECLONE_ENGINE=fake`).
+
+### Releasing (GitHub Actions)
+
+[.github/workflows/release.yml](.github/workflows/release.yml) builds installers
+for macOS (Apple Silicon + Intel), Linux, and Windows and attaches them to a
+**draft** GitHub Release. Each runner bundles the real OmniVoice + Whisper deps
+into the sidecar, then `tauri-action` builds the bundle.
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0   # or run the workflow manually
+```
+
+A placeholder icon set is committed under `frontend/src-tauri/icons/`; replace
+it with a real square logo via `pnpm tauri icon path/to/logo.png`. The ML deps
+make the build heavy (multi-GB installers, longer builds).
 
 ## Architecture notes
 
@@ -162,6 +184,9 @@ pre-cached.
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
 | `GET`  | `/api/health` | Liveness + active engine |
+| `GET`  | `/api/engine/status` | Engine readiness: `state` (idle/downloading/loading/ready/error), `message`, `progress` (0–1 or null), `detail` |
+| `POST` | `/api/engine/warmup` | Begin loading the model now (idempotent); returns the current status |
+| `DELETE` | `/api/engine/model` | Delete the downloaded model (reclaim disk; re-downloads when next needed) |
 | `GET`  | `/api/profiles` | List profiles |
 | `POST` | `/api/profiles` | Create profile (multipart: name, language, audio, optional transcript) |
 | `DELETE` | `/api/profiles/{id}` | Delete a profile |

@@ -1,12 +1,16 @@
 import { useState } from "react";
 
 import { CreateProfile } from "./components/CreateProfile";
+import { ModelManager } from "./components/ModelManager";
+import { ModelStatusBanner } from "./components/ModelStatusBanner";
 import { ProfileList } from "./components/ProfileList";
 import { Synthesize } from "./components/Synthesize";
+import { useEngineStatus } from "./hooks/useEngineStatus";
 import { useProfiles } from "./hooks/useProfiles";
 
 export default function App() {
   const { profiles, loading, error, refresh, remove } = useProfiles();
+  const { status: engineStatus, refresh: refreshEngine } = useEngineStatus();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
@@ -22,6 +26,8 @@ export default function App() {
         <h1>🎙️ VoiceClone</h1>
         <p className="muted">Record or upload a voice, then make it say anything — no sign-up.</p>
       </header>
+
+      <ModelStatusBanner status={engineStatus} />
 
       <main>
         <section className="column">
@@ -42,6 +48,10 @@ export default function App() {
           </div>
 
           {selected && <Synthesize profile={selected} />}
+
+          {engineStatus?.manageable && (
+            <ModelManager status={engineStatus} onChanged={refreshEngine} />
+          )}
         </section>
       </main>
     </div>

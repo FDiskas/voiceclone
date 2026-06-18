@@ -11,10 +11,18 @@ use tauri_plugin_shell::ShellExt;
 struct Backend(Mutex<Option<CommandChild>>);
 
 fn spawn_backend(app: &tauri::AppHandle) -> Result<CommandChild, tauri::Error> {
+    // The packaged app ships the real OmniVoice engine, so default the sidecar
+    // to it (and to Whisper for transcription). A developer can still override
+    // either by exporting the var before launching `tauri dev`.
+    let engine = std::env::var("VOICECLONE_ENGINE").unwrap_or_else(|_| "omnivoice".into());
+    let transcriber = std::env::var("VOICECLONE_TRANSCRIBER").unwrap_or_else(|_| "whisper".into());
+
     let (_rx, child) = app
         .shell()
         .sidecar("voiceclone-backend")
         .expect("failed to create sidecar command")
+        .env("VOICECLONE_ENGINE", engine)
+        .env("VOICECLONE_TRANSCRIBER", transcriber)
         .spawn()
         .expect("failed to spawn backend sidecar");
     Ok(child)

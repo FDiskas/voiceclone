@@ -1,4 +1,10 @@
-import type { CreateProfileInput, Profile, SynthesizeInput } from "./types";
+import type {
+  CreateProfileInput,
+  DeletedModel,
+  EngineStatus,
+  Profile,
+  SynthesizeInput,
+} from "./types";
 
 // Resolve where the API lives:
 //  - VITE_API_BASE wins if set (explicit override).
@@ -26,6 +32,22 @@ async function readError(response: Response): Promise<never> {
     // non-JSON body; keep the default message
   }
   throw new ApiError(detail);
+}
+
+// Readiness of the voice engine. On first desktop launch the model downloads
+// from Hugging Face, so the UI polls this to show a progress indicator.
+export async function getEngineStatus(): Promise<EngineStatus> {
+  const response = await fetch(`${API_BASE}/api/engine/status`);
+  if (!response.ok) await readError(response);
+  return response.json();
+}
+
+// Deletes the downloaded model from the local cache. It re-downloads on the
+// next warm-up (next launch, or the next synthesis).
+export async function deleteEngineModel(): Promise<DeletedModel> {
+  const response = await fetch(`${API_BASE}/api/engine/model`, { method: "DELETE" });
+  if (!response.ok) await readError(response);
+  return response.json();
 }
 
 export async function listProfiles(): Promise<Profile[]> {

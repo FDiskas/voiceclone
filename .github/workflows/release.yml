@@ -1,0 +1,137 @@
+name: Release
+
+# Builds the Tauri desktop bundles (with the OmniVoice backend embedded as a
+# sidecar) for macOS (Apple Silicon + Intel), Linux, and Windows, and attaches
+# them to a draft GitHub Release. Triggered by pushing a v* tag, or manually.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-14 # Apple Silicon
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+          - platform: macos-13 # Intel
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ""
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # System libraries Tauri needs to build on Linux.
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libappindicator3-dev \
+            patchelf
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+
+      # Bundle the FastAPI backend (with the real OmniVoice + Whisper deps) into
+      # a single binary named for this platform's target triple, where Tauri's
+      # sidecar mechanism expects it.
+      - name: Build backend sidecar
+        working-directory: backend
+        shell: bash
+        env:
+          TRIPLE: ${{ matrix.target }}
+          EXTRA_COLLECT: "torch torchaudio omnivoice faster_whisper"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[omnivoice,whisper]"
+          pip install pyinstaller
+          ./build_sidecar.sh
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # Windows code signing is configured via the bundler config (no env var),
+      # so when the cert secret is present we import it and emit a one-off
+      # --config override pointing tauri at its thumbprint. Skipped entirely
+      # when WINDOWS_CERTIFICATE is empty, so unsigned builds work unchanged.
+      - name: Prepare Windows code signing
+        if: matrix.platform == 'windows-latest' && env.WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP cert.pfx
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          $config = Join-Path $env:RUNNER_TEMP signing.conf.json
+          @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; timestampUrl = "http://timestamp.digicert.com" } } } |
+            ConvertTo-Json -Depth 5 | Set-Content -Path $config
+          "TAURI_SIGN_CONFIG=$config" >> $env:GITHUB_ENV
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # --- macOS signing + notarization (empty = unsigned build) ---
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # --- Tauri auto-updater signing (only used if the updater is added) ---
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: frontend
+          tagName: ${{ github.ref_name }}
+          releaseName: "VoiceClone ${{ github.ref_name }}"
+          releaseBody: "See the assets below to download and install VoiceClone."
+          releaseDraft: true
+          prerelease: false
+          # Appends the Windows signing override only when it was prepared above.
+          args: ${{ matrix.args }}${{ env.TAURI_SIGN_CONFIG != '' && format(' --config {0}', env.TAURI_SIGN_CONFIG) || '' }}
