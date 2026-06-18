@@ -97,6 +97,11 @@ export function StatusBar({ connStatus, logs, clearLogs }: Props) {
                   </span>
                   <span className="status-bar__log-time">{fmtTime(entry.ts)}</span>
                   <span className="status-bar__log-msg">{entry.message}</span>
+                  {entry.repeat > 1 && (
+                    <span className="status-bar__log-repeat" title={`Repeated ${entry.repeat} times`}>
+                      ×{entry.repeat}
+                    </span>
+                  )}
                 </div>
               ))
             )}

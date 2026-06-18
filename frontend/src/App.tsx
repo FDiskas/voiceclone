@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { CreateProfile } from "./components/CreateProfile";
+import { LoadingScreen } from "./components/LoadingScreen";
 import { ModelManager } from "./components/ModelManager";
 import { ModelStatusBanner } from "./components/ModelStatusBanner";
 import { ProfileList } from "./components/ProfileList";
@@ -24,40 +25,50 @@ export default function App() {
   };
 
   return (
-    <div className="app">
-      <header>
-        <h1>🎙️ VoiceClone</h1>
-        <p className="muted">Record or upload a voice, then make it say anything — no sign-up.</p>
-      </header>
+    // Outer wrapper fills the viewport — the loading screen and the app body
+    // both sit here so the fixed status bar is always rendered at the bottom.
+    <div className="app-shell">
+      {connStatus === "connecting" ? (
+        <LoadingScreen />
+      ) : (
+        <div className="app">
+          <header>
+            <h1>🎙️ VoiceClone</h1>
+            <p className="muted">Record or upload a voice, then make it say anything — no sign-up.</p>
+          </header>
 
-      <ModelStatusBanner status={engineStatus} onRetry={retryEngine} />
+          <ModelStatusBanner status={engineStatus} onRetry={retryEngine} />
 
-      <main>
-        <section className="column">
-          <CreateProfile onCreated={refresh} />
-        </section>
+          <main>
+            <section className="column">
+              <CreateProfile onCreated={refresh} />
+            </section>
 
-        <section className="column">
-          <div className="card">
-            <h2>Your voices</h2>
-            {loading && <p className="muted">Loading…</p>}
-            {error && <p className="error">{error}</p>}
-            <ProfileList
-              profiles={profiles}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onDelete={handleDelete}
-            />
-          </div>
+            <section className="column">
+              <div className="card">
+                <h2>Your voices</h2>
+                {loading && <p className="muted">Loading…</p>}
+                {error && <p className="error">{error}</p>}
+                <ProfileList
+                  profiles={profiles}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  onDelete={handleDelete}
+                />
+              </div>
 
-          {selected && <Synthesize profile={selected} />}
+              {selected && <Synthesize profile={selected} />}
 
-          {engineStatus?.manageable && (
-            <ModelManager status={engineStatus} onChanged={refreshEngine} />
-          )}
-        </section>
-      </main>
+              {engineStatus?.manageable && (
+                <ModelManager status={engineStatus} onChanged={refreshEngine} />
+              )}
+            </section>
+          </main>
+        </div>
+      )}
 
+      {/* Status bar is always visible — including during the loading screen and
+          the error state — so the user can see what's happening. */}
       <StatusBar connStatus={connStatus} logs={logs} clearLogs={clearLogs} />
     </div>
   );
