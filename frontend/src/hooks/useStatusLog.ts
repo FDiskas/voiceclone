@@ -50,6 +50,8 @@ export interface StatusLogState {
   connStatus: ConnStatus;
   logs: LogEntry[];
   clearLogs: () => void;
+  /** Absolute path to the backend log file, once the sidecar has started. */
+  logPath: string | null;
 }
 
 let _idSeq = 0;
@@ -137,6 +139,7 @@ function makeLogEntry(
 export function useStatusLog(): StatusLogState {
   const [connStatus, setConnStatus] = useState<ConnStatus>("connecting");
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logPath, setLogPath] = useState<string | null>(null);
 
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const cancelled = useRef(false);
@@ -186,6 +189,24 @@ export function useStatusLog(): StatusLogState {
 
     return () => unlisten?.();
   }, [addEntry]);
+
+  // Listen for the log file path emitted by Rust once the sidecar starts.
+  useEffect(() => {
+    type TauriEvent = { payload: string };
+    type TauriEventApi = {
+      listen(event: string, handler: (ev: TauriEvent) => void): Promise<() => void>;
+    };
+    const api = (window as { __TAURI__?: { event?: TauriEventApi } }).__TAURI__?.event;
+    if (!api) return;
+
+    let unlisten: (() => void) | undefined;
+    api
+      .listen("backend:log-path", (ev) => setLogPath(ev.payload))
+      .then((fn) => { unlisten = fn; })
+      .catch(() => { /* not in Tauri shell */ });
+
+    return () => unlisten?.();
+  }, []);
 
   // Poll /api/health to track connection state (silently — not logged).
   const poll = useCallback(async () => {
@@ -239,5 +260,5 @@ export function useStatusLog(): StatusLogState {
     };
   }, [poll]);
 
-  return { connStatus, logs, clearLogs };
+  return { connStatus, logs, clearLogs, logPath };
 }

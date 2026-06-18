@@ -14,7 +14,7 @@ import { useStatusLog } from "./hooks/useStatusLog";
 export default function App() {
   const { profiles, loading, error, refresh, remove } = useProfiles();
   const { status: engineStatus, refresh: refreshEngine, retry: retryEngine } = useEngineStatus();
-  const { connStatus, logs, clearLogs } = useStatusLog();
+  const { connStatus, logs, clearLogs, logPath } = useStatusLog();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
@@ -69,7 +69,7 @@ export default function App() {
 
       {/* Status bar is always visible — including during the loading screen and
           the error state — so the user can see what's happening. */}
-      <StatusBar connStatus={connStatus} logs={logs} clearLogs={clearLogs} />
+      <StatusBar connStatus={connStatus} logs={logs} clearLogs={clearLogs} logPath={logPath} />
     </div>
   );
 }

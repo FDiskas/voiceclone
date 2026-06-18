@@ -5,6 +5,8 @@ interface Props {
   connStatus: ConnStatus;
   logs: LogEntry[];
   clearLogs: () => void;
+  /** Absolute path to backend.log; undefined until the sidecar starts. */
+  logPath: string | null;
 }
 
 const STATUS_LABEL: Record<ConnStatus, string> = {
@@ -23,11 +25,22 @@ function fmtTime(d: Date) {
   return d.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-export function StatusBar({ connStatus, logs, clearLogs }: Props) {
+export function StatusBar({ connStatus, logs, clearLogs, logPath }: Props) {
   const [open, setOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
   const prevLen = useRef(logs.length);
+
+  // Open the backend log file in the system's default text editor.
+  const openLogFile = () => {
+    if (!logPath) return;
+    // Use Tauri's opener/shell plugin when inside the desktop app.
+    type TauriShellApi = { open(path: string): Promise<void> };
+    const shellApi = (window as { __TAURI__?: { shell?: TauriShellApi } }).__TAURI__?.shell;
+    if (shellApi) {
+      shellApi.open(logPath).catch(console.error);
+    }
+  };
 
   // Auto-scroll to bottom when new logs arrive (if autoscroll is on).
   useEffect(() => {
@@ -66,6 +79,16 @@ export function StatusBar({ connStatus, logs, clearLogs }: Props) {
                   title="Scroll to bottom"
                 >
                   ↓ Follow
+                </button>
+              )}
+              {logPath && (
+                <button
+                  type="button"
+                  className="status-bar__action-btn"
+                  onClick={openLogFile}
+                  title={`Open ${logPath}`}
+                >
+                  📄 Open log file
                 </button>
               )}
               <button
