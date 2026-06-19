@@ -41,11 +41,17 @@ def synthesize_speech_stream(
 
     # Called eagerly: validation + profile lookup run now, so errors map to a
     # normal HTTP response instead of surfacing after streaming has begun.
-    chunks = synthesis.synthesize_stream(profile_id, body.text, body.speed)
+    stream = synthesis.synthesize_stream(profile_id, body.text, body.speed)
 
     def frames() -> Iterator[bytes]:
-        for chunk in chunks:
+        for chunk in stream.chunks:
             yield _FRAME_HEADER.pack(len(chunk))
             yield chunk
 
-    return StreamingResponse(frames(), media_type="application/octet-stream")
+    # Announce the chunk (sentence) count up front so the client can show a
+    # progress bar; it's exposed via CORS so the Tauri webview can read it.
+    return StreamingResponse(
+        frames(),
+        media_type="application/octet-stream",
+        headers={"X-Total-Chunks": str(stream.total)},
+    )

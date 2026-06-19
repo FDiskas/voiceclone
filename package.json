@@ -1,0 +1,17 @@
+{
+  "name": "voiceclone",
+  "private": true,
+  "version": "1.1.2",
+  "description": "Registration-free voice cloning app (React/Vite + FastAPI + Tauri). Workspace root / coordinator.",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"pnpm dev:backend\" \"pnpm dev:frontend\"",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000",
+    "dev:frontend": "pnpm --filter voiceclone-frontend dev",
+    "build": "pnpm --filter voiceclone-frontend build",
+    "desktop:dev": "pnpm --filter voiceclone-frontend desktop:dev",
+    "desktop:build": "pnpm --filter voiceclone-frontend desktop:build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

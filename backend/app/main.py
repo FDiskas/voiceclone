@@ -42,6 +42,9 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Custom response headers JS must be able to read cross-origin (the
+        # Tauri webview is a different origin than the sidecar backend).
+        expose_headers=["X-Total-Chunks"],
     )
 
     app.include_router(routes_profiles.router)

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { audioDurationSeconds } from "../api/audio";
-import { createProfile, transcribe } from "../api/client";
+import { createProfile, isAbortError, transcribe } from "../api/client";
 import { LANGUAGES } from "../constants/languages";
 import { AudioSource } from "./AudioSource";
 
@@ -25,6 +25,11 @@ export function CreateProfile({ onCreated, defaultLanguage }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lets the user cancel an in-flight auto-transcription.
+  const transcribeAbortRef = useRef<AbortController | null>(null);
+
+  // Abort an in-flight transcription if the component unmounts.
+  useEffect(() => () => transcribeAbortRef.current?.abort(), []);
 
   // Measure the reference clip whenever it changes, so we can warn about
   // overly long samples. Ignore decode failures — duration is advisory only.
@@ -53,16 +58,24 @@ export function CreateProfile({ onCreated, defaultLanguage }: Props) {
 
   const handleAutoTranscribe = async () => {
     if (!audio) return;
+    const controller = new AbortController();
+    transcribeAbortRef.current = controller;
     setTranscribing(true);
     setError(null);
     try {
-      setTranscript(await transcribe(audio, language));
+      setTranscript(await transcribe(audio, language, controller.signal));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Transcription failed.");
+      // A user-initiated cancel isn't an error.
+      if (!isAbortError(err)) {
+        setError(err instanceof Error ? err.message : "Transcription failed.");
+      }
     } finally {
       setTranscribing(false);
+      transcribeAbortRef.current = null;
     }
   };
+
+  const handleCancelTranscribe = () => transcribeAbortRef.current?.abort();
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -115,14 +128,15 @@ export function CreateProfile({ onCreated, defaultLanguage }: Props) {
 
       <div className="transcript-header">
         <span className="label-text">Transcript (optional)</span>
-        <button
-          type="button"
-          className="link"
-          disabled={!audio || transcribing}
-          onClick={handleAutoTranscribe}
-        >
-          {transcribing ? "Transcribing…" : "✦ Auto-transcribe"}
-        </button>
+        {transcribing ? (
+          <button type="button" className="link" onClick={handleCancelTranscribe}>
+            Transcribing… ◼ Cancel
+          </button>
+        ) : (
+          <button type="button" className="link" disabled={!audio} onClick={handleAutoTranscribe}>
+            ✦ Auto-transcribe
+          </button>
+        )}
       </div>
       <textarea
         value={transcript}

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { synthesize, synthesizeStream } from "../api/client";
+import { isAbortError, synthesize, synthesizeStream } from "../api/client";
 import { concatWavChunks, saveBlob } from "../api/audio";
 import type { Profile } from "../api/types";
 import { StreamingAudioPlayer } from "../audio/streamingPlayer";
+import { formatDuration } from "../format";
 
 interface Props {
   profile: Profile;
@@ -23,26 +24,54 @@ export function Synthesize({ profile }: Props) {
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Streaming progress: how many sentences have rendered out of the total, and
+  // an estimate of the seconds left (extrapolated from the average time per
+  // completed sentence). Null when not streaming or before the total is known;
+  // etaSeconds is null until the first sentence finishes.
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+    etaSeconds: number | null;
+  } | null>(null);
+  // Lets the user cancel an in-flight synthesis. Held in a ref so the Stop
+  // button and unmount cleanup can reach the current request.
+  const abortRef = useRef<AbortController | null>(null);
+  // Wall-clock start of the current stream, for the per-sentence ETA estimate.
+  const streamStartRef = useRef(0);
+
+  // Abort any in-flight request if the component goes away (e.g. the user
+  // switches to another profile or view).
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const charCount = text.length;
   const overLimit = charCount > MAX_SYNTHESIS_CHARS;
 
   const handleSpeak = async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setError(null);
     setDownloadBlob(null);
+    setProgress(null);
     try {
       if (streaming) {
-        await playStreamed();
+        await playStreamed(controller.signal);
       } else {
-        await playWhole();
+        await playWhole(controller.signal);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Synthesis failed.");
+      // A user-initiated cancel isn't an error — leave the UI clean.
+      if (!isAbortError(err)) {
+        setError(err instanceof Error ? err.message : "Synthesis failed.");
+      }
     } finally {
       setBusy(false);
+      setProgress(null);
+      abortRef.current = null;
     }
   };
+
+  const handleStop = () => abortRef.current?.abort();
 
   const showPlayer = (blob: Blob, play: boolean) => {
     setAutoPlay(play);
@@ -52,26 +81,49 @@ export function Synthesize({ profile }: Props) {
     });
   };
 
-  const playWhole = async () => {
-    const blob = await synthesize(profile.id, { text, speed });
+  const playWhole = async (signal: AbortSignal) => {
+    const blob = await synthesize(profile.id, { text, speed }, signal);
     setDownloadBlob(blob);
     showPlayer(blob, true);
   };
 
-  const playStreamed = async () => {
+  const playStreamed = async (signal: AbortSignal) => {
     setAudioUrl(null);
     const player = new StreamingAudioPlayer();
     // Keep a copy of each chunk so we can offer the full clip for download —
     // decodeAudioData in the player detaches the original buffer.
     const chunks: ArrayBuffer[] = [];
     try {
-      await synthesizeStream(profile.id, { text, speed }, (wav) => {
-        chunks.push(wav.slice(0));
-        void player.enqueue(wav);
-      });
+      await synthesizeStream(
+        profile.id,
+        { text, speed },
+        (wav) => {
+          chunks.push(wav.slice(0));
+          void player.enqueue(wav);
+          // Read the clock outside the updater so it stays a pure function of
+          // its previous state.
+          const elapsed = (performance.now() - streamStartRef.current) / 1000;
+          setProgress((prev) => {
+            if (!prev) return prev;
+            const done = prev.done + 1;
+            const remaining = prev.total - done;
+            // Average per-sentence time so far, extrapolated to what's left.
+            const etaSeconds = remaining > 0 ? (elapsed / done) * remaining : null;
+            return { ...prev, done, etaSeconds };
+          });
+        },
+        (total) => {
+          streamStartRef.current = performance.now();
+          setProgress({ done: 0, total, etaSeconds: null });
+        },
+        signal,
+      );
     } finally {
       void player.close();
     }
+    // Cancelled mid-stream: discard the partial render rather than offering a
+    // truncated clip.
+    if (signal.aborted) return;
     const blob = concatWavChunks(chunks);
     setDownloadBlob(blob);
     // Surface a player for the assembled clip so it can be replayed/scrubbed.
@@ -122,14 +174,36 @@ export function Synthesize({ profile }: Props) {
 
       {error && <p className="error">{error}</p>}
 
-      <button
-        type="button"
-        className="primary"
-        disabled={!text.trim() || busy || overLimit}
-        onClick={handleSpeak}
-      >
-        {busy ? "Synthesizing…" : "Generate speech"}
-      </button>
+      <div className="row">
+        <button
+          type="button"
+          className="primary"
+          disabled={!text.trim() || busy || overLimit}
+          onClick={handleSpeak}
+        >
+          {busy ? "Synthesizing…" : "Generate speech"}
+        </button>
+        {busy && (
+          <button type="button" className="danger" onClick={handleStop}>
+            ◼ Stop
+          </button>
+        )}
+      </div>
+
+      {busy && progress && (
+        <div className="synth-progress" aria-live="polite">
+          <span className="muted">
+            Synthesizing… {progress.done}/{progress.total} sentence{progress.total === 1 ? "" : "s"}
+            {progress.etaSeconds != null && ` · ~${formatDuration(progress.etaSeconds)} left`}
+          </span>
+          <div className="progress">
+            <div
+              className="progress__bar"
+              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {audioUrl && <audio controls autoPlay={autoPlay} src={audioUrl} />}
 

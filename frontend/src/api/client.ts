@@ -25,6 +25,13 @@ function resolveApiBase(): string {
 
 class ApiError extends Error {}
 
+// True when a fetch was cancelled via AbortController — i.e. the user changed
+// their mind, not a real failure. Callers use this to stay quiet rather than
+// surface an error message.
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
 async function readError(response: Response): Promise<never> {
   let detail = `Request failed (${response.status})`;
   try {
@@ -101,11 +108,16 @@ export async function deleteProfile(id: string): Promise<void> {
   if (!response.ok) await readError(response);
 }
 
-export async function synthesize(id: string, input: SynthesizeInput): Promise<Blob> {
+export async function synthesize(
+  id: string,
+  input: SynthesizeInput,
+  signal?: AbortSignal,
+): Promise<Blob> {
   const response = await fetch(`${API_BASE}/api/profiles/${id}/speech`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   });
   if (!response.ok) await readError(response);
   return response.blob();
@@ -113,17 +125,25 @@ export async function synthesize(id: string, input: SynthesizeInput): Promise<Bl
 
 // Streams one WAV chunk per sentence. `onChunk` fires as each chunk arrives so
 // the first sentence can play while the rest are still being synthesized.
+// `onTotal`, if given, reports the total number of chunks (sentences) before
+// the first one arrives, so callers can show progress.
 export async function synthesizeStream(
   id: string,
   input: SynthesizeInput,
   onChunk: (wav: ArrayBuffer) => void,
+  onTotal?: (total: number) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/api/profiles/${id}/speech/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   });
   if (!response.ok || !response.body) await readError(response);
+
+  const total = Number(response.headers.get("X-Total-Chunks"));
+  if (onTotal && Number.isFinite(total) && total > 0) onTotal(total);
 
   const reader = response.body!.getReader();
   const parser = new FrameParser(onChunk);
@@ -172,13 +192,21 @@ function copyFrom(src: Uint8Array, start: number): Uint8Array {
   return out;
 }
 
-export async function transcribe(audio: Blob, language?: string): Promise<string> {
+export async function transcribe(
+  audio: Blob,
+  language?: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const { data, filename } = await toUploadAudio(audio);
   const form = new FormData();
   form.append("audio", data, filename);
   if (language) form.append("language", language);
 
-  const response = await fetch(`${API_BASE}/api/transcribe`, { method: "POST", body: form });
+  const response = await fetch(`${API_BASE}/api/transcribe`, {
+    method: "POST",
+    body: form,
+    signal,
+  });
   if (!response.ok) await readError(response);
   const body = await response.json();
   return body.text as string;

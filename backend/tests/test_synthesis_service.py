@@ -53,8 +53,10 @@ _TWO_SENTENCES = ("word " * 40).strip() + ". " + ("alpha " * 40).strip() + "."
 def test_streaming_yields_one_wav_per_sentence(profile_service, synthesis_service):
     profile = _create_profile(profile_service)
 
-    chunks = list(synthesis_service.synthesize_stream(profile.id.value, _TWO_SENTENCES))
+    stream = synthesis_service.synthesize_stream(profile.id.value, _TWO_SENTENCES)
+    chunks = list(stream.chunks)
 
+    assert stream.total == 2
     assert len(chunks) == 2
     for chunk in chunks:
         samples, sample_rate = sf.read(io.BytesIO(chunk))

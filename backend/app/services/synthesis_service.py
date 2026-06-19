@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterator
 
 from ..audio.wav import encode_wav
@@ -10,6 +11,20 @@ from ..domain.values import SpeechText
 from ..engine.base import SynthesisRequest, VoiceEngine
 from ..text.segmentation import split_into_sentences
 from .profile_service import ProfileService
+
+
+@dataclass(frozen=True)
+class StreamedSynthesis:
+    """A sentence-by-sentence synthesis whose size is known before it runs.
+
+    Segmentation happens eagerly, so `total` (the number of wav chunks that
+    will be yielded) is available up front — the API announces it so the client
+    can show real progress — while `chunks` renders lazily, one wav per
+    sentence as each finishes.
+    """
+
+    total: int
+    chunks: Iterator[bytes]
 
 
 class SynthesisService:
@@ -28,12 +43,13 @@ class SynthesisService:
 
     def synthesize_stream(
         self, profile_id: str, text: str, speed: float = 1.0
-    ) -> Iterator[bytes]:
+    ) -> StreamedSynthesis:
         """Render sentence by sentence, yielding each chunk's wav as it is ready.
 
-        The profile lookup and text validation happen eagerly (before any
-        audio is yielded) so errors surface as a normal response rather than
-        mid-stream, after a 200 has already been sent.
+        The profile lookup, text validation, and segmentation happen eagerly
+        (before any audio is yielded) so errors surface as a normal response
+        rather than mid-stream after a 200 has been sent, and so the chunk
+        count is known up front for progress reporting.
         """
         speech = SpeechText(text)
         profile = self._profiles.get(profile_id)
@@ -44,7 +60,7 @@ class SynthesisService:
                 result = self._engine.synthesize(self._request_for(profile, sentence, speed))
                 yield encode_wav(result.samples, result.sample_rate)
 
-        return chunks()
+        return StreamedSynthesis(total=len(sentences), chunks=chunks())
 
     @staticmethod
     def _request_for(profile: VoiceProfile, text: str, speed: float) -> SynthesisRequest:
