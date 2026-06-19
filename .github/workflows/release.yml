@@ -74,7 +74,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -111,8 +111,10 @@ jobs:
           # PyInstaller intermediates to free disk for the Rust build.
           rm -rf build dist
 
-      - name: Install frontend dependencies
-        working-directory: frontend
+      # Install the whole pnpm workspace from the repo root (the lockfile lives
+      # at the root now, not in frontend/). This installs the frontend package
+      # along with any other workspace members.
+      - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
       # Export signing/notarization secrets to the environment ONLY when they
