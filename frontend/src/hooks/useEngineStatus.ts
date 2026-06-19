@@ -8,22 +8,20 @@ const POLL_INTERVAL_MS = 1500;
 export interface EngineStatusState {
   status: EngineStatus | null;
   refresh: () => Promise<void>;
-  retry: () => void;
 }
 
 // Whether the engine is in a transient state that warrants continued polling.
-// "idle" is included because warm_up() fires at startup but the engine may
-// still be in "idle" for a brief moment before it transitions to "loading" or
-// "downloading" — stopping here would miss the entire progress window.
+// "idle" is a resting state now (the model loads on demand, not at startup), so
+// we stop polling there and resume once the user triggers a download — see
+// `refresh`, which the Download button calls after POSTing /warmup.
 function shouldKeepPolling(state: string): boolean {
-  return state === "downloading" || state === "loading" || state === "idle";
+  return state === "downloading" || state === "loading";
 }
 
 // Polls the backend's engine readiness while the model is actively becoming
 // ready (idle → downloading → loading → ready|error). Stops once the state
-// settles on "ready" or "error". `refresh` re-fetches on demand (e.g. after
-// deleting the model) and resumes polling if the engine is busy again.
-// `retry` restarts polling from an error state.
+// settles on "ready" or "error". `refresh` re-fetches on demand (after a
+// download is triggered or a model deleted) and resumes polling if busy again.
 export function useEngineStatus(): EngineStatusState {
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -49,13 +47,6 @@ export function useEngineStatus(): EngineStatusState {
     await tick();
   }, [tick]);
 
-  // Restart polling from an error state (e.g. user clicks "Retry").
-  const retry = useCallback(() => {
-    clearTimeout(timer.current);
-    setStatus(null);
-    void tick();
-  }, [tick]);
-
   useEffect(() => {
     cancelled.current = false;
     void tick();
@@ -65,5 +56,5 @@ export function useEngineStatus(): EngineStatusState {
     };
   }, [tick]);
 
-  return { status, refresh, retry };
+  return { status, refresh };
 }

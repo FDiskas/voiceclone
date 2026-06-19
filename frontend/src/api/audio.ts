@@ -35,6 +35,24 @@ export async function convertToWav(blob: Blob): Promise<Blob> {
   return encodeWav(rendered.getChannelData(0), TARGET_SAMPLE_RATE);
 }
 
+/**
+ * Duration of an audio blob in seconds, using the platform codecs the WebView
+ * already ships. We decode rather than reading `HTMLAudioElement.duration`
+ * because MediaRecorder's webm/opus output reports `Infinity` there until the
+ * clip is seeked to the end — decoding is reliable for both recordings and
+ * uploads. Throws if the WebView can't decode the input.
+ */
+export async function audioDurationSeconds(blob: Blob): Promise<number> {
+  const arrayBuffer = await blob.arrayBuffer();
+  const ctx = new AudioContext();
+  try {
+    const decoded = await ctx.decodeAudioData(arrayBuffer);
+    return decoded.duration;
+  } finally {
+    await ctx.close();
+  }
+}
+
 /** Serialize mono float samples as a 16-bit PCM WAV blob. */
 function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const bytesPerSample = 2;

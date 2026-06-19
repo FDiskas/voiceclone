@@ -12,6 +12,7 @@ from ..config import Settings, get_settings
 from ..engine.base import VoiceEngine
 from ..engine.fake_engine import FakeVoiceEngine
 from ..engine.omnivoice_engine import OmniVoiceEngine
+from ..models import ModelRegistry, is_managed
 from ..services.profile_service import ProfileService
 from ..services.synthesis_service import SynthesisService
 from ..services.transcription_service import TranscriptionService
@@ -78,3 +79,10 @@ def _build_omnivoice(settings: Settings) -> OmniVoiceEngine:
 @lru_cache
 def get_synthesis_service() -> SynthesisService:
     return SynthesisService(get_profile_service(), get_voice_engine())
+
+
+@lru_cache
+def get_model_registry() -> ModelRegistry:
+    """Every active component that owns a downloadable model (engine, transcriber)."""
+    candidates = (get_voice_engine(), get_transcriber())
+    return ModelRegistry(c for c in candidates if is_managed(c))

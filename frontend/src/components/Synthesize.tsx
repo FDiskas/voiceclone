@@ -9,6 +9,11 @@ interface Props {
   profile: Profile;
 }
 
+// Keep in sync with `_MAX_SYNTHESIS_LENGTH` in backend/app/domain/values.py.
+// The backend is the source of truth; this just gives immediate UI feedback
+// instead of a round-trip rejection.
+const MAX_SYNTHESIS_CHARS = 50_000;
+
 export function Synthesize({ profile }: Props) {
   const [text, setText] = useState("");
   const [speed, setSpeed] = useState(1.0);
@@ -18,6 +23,9 @@ export function Synthesize({ profile }: Props) {
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const charCount = text.length;
+  const overLimit = charCount > MAX_SYNTHESIS_CHARS;
 
   const handleSpeak = async () => {
     setBusy(true);
@@ -88,7 +96,11 @@ export function Synthesize({ profile }: Props) {
           onChange={(e) => setText(e.target.value)}
           placeholder="Type what this voice should say…"
           rows={4}
+          aria-invalid={overLimit}
         />
+        <span className={`char-count${overLimit ? " char-count--over" : ""}`} aria-live="polite">
+          {charCount.toLocaleString()} / {MAX_SYNTHESIS_CHARS.toLocaleString()}
+        </span>
       </label>
 
       <label>
@@ -110,7 +122,12 @@ export function Synthesize({ profile }: Props) {
 
       {error && <p className="error">{error}</p>}
 
-      <button type="button" className="primary" disabled={!text.trim() || busy} onClick={handleSpeak}>
+      <button
+        type="button"
+        className="primary"
+        disabled={!text.trim() || busy || overLimit}
+        onClick={handleSpeak}
+      >
         {busy ? "Synthesizing…" : "Generate speech"}
       </button>
 

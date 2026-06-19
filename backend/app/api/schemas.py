@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..domain.profile import VoiceProfile
 from ..engine.readiness import EngineStatus
+from ..models.managed_model import DeletedModel, ModelInfo
 
 
 class ProfileResponse(BaseModel):
@@ -44,22 +45,43 @@ class EngineStatusResponse(BaseModel):
     message: str
     progress: float | None = None  # 0..1 when known, else null (indeterminate)
     detail: str | None = None  # error text when state == "error"
-    manageable: bool = False  # whether the model can be deleted/re-downloaded
 
     @classmethod
-    def from_status(cls, status: EngineStatus, manageable: bool = False) -> "EngineStatusResponse":
+    def from_status(cls, status: EngineStatus) -> "EngineStatusResponse":
         return cls(
             state=status.state,
             message=status.message,
             progress=status.progress,
             detail=status.detail,
-            manageable=manageable,
+        )
+
+
+class ModelInfoResponse(BaseModel):
+    """A managed model's identity and on-disk footprint, for the settings UI."""
+
+    key: str
+    label: str
+    repo_id: str
+    downloaded: bool
+    path: str | None = None
+    size_bytes: int = 0
+
+    @classmethod
+    def from_info(cls, info: ModelInfo) -> "ModelInfoResponse":
+        return cls(
+            key=info.key,
+            label=info.label,
+            repo_id=info.repo_id,
+            downloaded=info.downloaded,
+            path=info.path,
+            size_bytes=info.size_bytes,
         )
 
 
 class DeletedModelResponse(BaseModel):
-    """Result of deleting the downloaded model from the local cache."""
+    """Result of deleting a downloaded model from the local cache."""
 
+    key: str
     repo_id: str
     found: bool
     freed_bytes: int

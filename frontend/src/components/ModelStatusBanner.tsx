@@ -3,16 +3,19 @@ import type { EngineStatus } from "../api/types";
 interface Props {
   status: EngineStatus | null;
   onRetry?: () => void;
+  // Begin downloading/loading the model (POST /warmup, then resume polling).
+  onDownload?: () => void;
 }
 
 // Shows a download/load indicator while the voice model becomes ready.
 //
 // Visibility matrix:
 //   null (first poll not yet landed) → subtle "connecting" strip
-//   idle / loading / downloading     → progress banner (spinner + bar)
+//   idle                             → "Download voice model" call-to-action
+//   loading / downloading            → progress banner (spinner + bar)
 //   ready                            → hidden (synthesis available)
 //   error                            → error banner with retry
-export function ModelStatusBanner({ status, onRetry }: Props) {
+export function ModelStatusBanner({ status, onRetry, onDownload }: Props) {
   // Before the first poll lands show a minimal "connecting" hint so the
   // user knows the app is doing something (previously this was blank).
   if (!status) {
@@ -45,7 +48,26 @@ export function ModelStatusBanner({ status, onRetry }: Props) {
   // Hidden once ready — synthesis is available, no need to show anything.
   if (status.state === "ready") return null;
 
-  // idle / downloading / loading — show progress bar.
+  // Idle: the model isn't loaded and nothing is downloading yet. Offer an
+  // explicit download instead of pulling hundreds of MB unprompted.
+  if (status.state === "idle" && onDownload) {
+    return (
+      <div className="model-banner" role="status">
+        <div className="model-banner__row">
+          <span>Voice model isn’t loaded yet.</span>
+          <button type="button" className="primary" onClick={onDownload}>
+            Download voice model
+          </button>
+        </div>
+        <p className="muted model-banner__hint">
+          First run fetches the model from Hugging Face (a few hundred MB, once). Afterwards it just
+          loads from cache.
+        </p>
+      </div>
+    );
+  }
+
+  // downloading / loading — show progress bar.
   const pct = status.progress != null ? Math.round(status.progress * 100) : null;
   const indeterminate = pct == null;
 

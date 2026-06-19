@@ -1,31 +1,53 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { audioDurationSeconds } from "../api/audio";
 import { createProfile, transcribe } from "../api/client";
+import { LANGUAGES } from "../constants/languages";
 import { AudioSource } from "./AudioSource";
 
 interface Props {
   onCreated: () => void;
+  // The language preselected for a new profile (a user preference from Settings).
+  defaultLanguage: string;
 }
 
-const LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "lt", label: "Lithuanian" },
-  { code: "de", label: "German" },
-  { code: "fr", label: "French" },
-  { code: "es", label: "Spanish" },
-  { code: "pt-BR", label: "Portuguese (Brazil)" },
-  { code: "ru", label: "Russian" },
-  { code: "zh", label: "Chinese" },
-];
+// Reference clips longer than this trigger a quality/perf warning. OmniVoice
+// clones best from a short sample; long references slow generation and hurt
+// fidelity. Keep the recommended range in sync with the warning copy below.
+const REFERENCE_WARN_SECONDS = 20;
 
-export function CreateProfile({ onCreated }: Props) {
+export function CreateProfile({ onCreated, defaultLanguage }: Props) {
   const [name, setName] = useState("");
-  const [language, setLanguage] = useState("en");
+  const [language, setLanguage] = useState(defaultLanguage);
   const [transcript, setTranscript] = useState("");
   const [audio, setAudio] = useState<Blob | null>(null);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Measure the reference clip whenever it changes, so we can warn about
+  // overly long samples. Ignore decode failures — duration is advisory only.
+  useEffect(() => {
+    if (!audio) {
+      setAudioDuration(null);
+      return;
+    }
+    let cancelled = false;
+    setAudioDuration(null);
+    audioDurationSeconds(audio)
+      .then((seconds) => {
+        if (!cancelled) setAudioDuration(seconds);
+      })
+      .catch(() => {
+        if (!cancelled) setAudioDuration(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [audio]);
+
+  const referenceTooLong = audioDuration != null && audioDuration > REFERENCE_WARN_SECONDS;
 
   const canSubmit = name.trim() && audio && !submitting;
 
@@ -82,6 +104,14 @@ export function CreateProfile({ onCreated }: Props) {
 
       <span className="label-text">Reference voice</span>
       <AudioSource onChange={setAudio} />
+
+      {referenceTooLong && audioDuration != null && (
+        <p className="warning" role="status">
+          Reference audio is {audioDuration.toFixed(1)}s long (&gt;{REFERENCE_WARN_SECONDS}s). This
+          may cause slower generation, higher memory usage, and degraded voice cloning quality. We
+          recommend trimming it to 3–10s.
+        </p>
+      )}
 
       <div className="transcript-header">
         <span className="label-text">Transcript (optional)</span>

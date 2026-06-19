@@ -49,6 +49,33 @@ def test_no_capture_outside_context_does_not_leak():
     assert calls == []
 
 
+def test_prefers_byte_bar_over_file_count_bar():
+    """snapshot_download runs a 'Fetching N files' count bar *and* a byte bar.
+
+    Summing them mixes units (files + bytes) and pins progress near 0% while the
+    one big weights file downloads. When any byte bar is active we must report
+    byte progress alone.
+    """
+    seen: list[tuple[int, int]] = []
+    with capture_download_progress(lambda d, t: seen.append((d, t))):
+        # snapshot_download creates the byte bar upfront, then the count bar.
+        data = hf_tqdm(total=1000, unit="B", unit_scale=True, disable=False)
+        files = hf_tqdm(total=13, disable=False)  # default unit = file count
+        data.update(500)  # half the bytes…
+        files.update(1)  # …only 1 of 13 files done
+        data.update(500)
+        files.update(12)
+        data.close()
+        files.close()
+
+    # Final byte state, not 13/1013 (mixed) — the file bar is excluded.
+    assert seen[-1] == (1000, 1000)
+    # Mid-download we reported the byte fraction (500/1000), never files+bytes.
+    assert (500, 1000) in seen
+    # Every reading is a byte fraction (total 1000), never the file count (13).
+    assert all(total == 1000 for _, total in seen if total)
+
+
 def test_total_grows_with_aggregate_bar():
     """snapshot_download bumps `total` as files are discovered; we track it."""
     seen: list[tuple[int, int]] = []

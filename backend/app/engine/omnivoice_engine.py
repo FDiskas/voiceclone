@@ -13,9 +13,10 @@ import logging
 import threading
 
 from ..domain.errors import SynthesisError
+from ..models import huggingface_cache
+from ..models.managed_model import DeletedModel, ModelInfo
 from .base import SynthesisRequest, SynthesisResult
 from .hf_progress import capture_download_progress
-from .management import DeletedModel
 from .readiness import (
     STATE_DOWNLOADING,
     STATE_ERROR,
@@ -94,7 +95,20 @@ class OmniVoiceEngine:
                 detail=self._detail,
             )
 
-    # --- ManagedModelEngine ---------------------------------------------
+    # --- ManagedModel ---------------------------------------------------
+
+    model_key = "voice"
+
+    def model_info(self) -> ModelInfo:
+        entry = huggingface_cache.describe(self._model_id)
+        return ModelInfo(
+            key=self.model_key,
+            label="Voice model",
+            repo_id=self._model_id,
+            downloaded=entry.downloaded,
+            path=entry.path,
+            size_bytes=entry.size_bytes,
+        )
 
     def delete_model(self) -> DeletedModel:
         """Unload the model and purge its cache so it re-downloads next time."""
@@ -105,7 +119,7 @@ class OmniVoiceEngine:
             # so the next load rebuilds against the fresh model/device context.
             with self._infer_lock:
                 self._prompt_cache.clear()
-            freed, found = self._purge_cache()
+            found, freed = huggingface_cache.purge(self._model_id)
         with self._state_lock:
             self._state = STATE_IDLE
             self._message = "Voice model not loaded yet."
@@ -117,26 +131,9 @@ class OmniVoiceEngine:
             found,
             freed,
         )
-        return DeletedModel(repo_id=self._model_id, found=found, freed_bytes=freed)
-
-    def _purge_cache(self) -> tuple[int, bool]:
-        """Remove this model's revisions from the Hugging Face cache."""
-        try:
-            from huggingface_hub import scan_cache_dir
-        except Exception:  # noqa: BLE001 - hub absent: nothing cached to remove
-            return 0, False
-
-        cache = scan_cache_dir()
-        commit_hashes: list[str] = []
-        freed = 0
-        for repo in cache.repos:
-            if repo.repo_id == self._model_id:
-                freed += repo.size_on_disk
-                commit_hashes.extend(rev.commit_hash for rev in repo.revisions)
-        if not commit_hashes:
-            return 0, False
-        cache.delete_revisions(*commit_hashes).execute()
-        return freed, True
+        return DeletedModel(
+            key=self.model_key, repo_id=self._model_id, found=found, freed_bytes=freed
+        )
 
     def _warm(self) -> None:
         try:

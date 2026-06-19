@@ -14,7 +14,7 @@ from .errors import ValidationError
 
 _MAX_NAME_LENGTH = 80
 _MAX_TRANSCRIPT_LENGTH = 2_000
-_MAX_SYNTHESIS_LENGTH = 5_000
+_MAX_SYNTHESIS_LENGTH = 50_000
 _LANGUAGE_PATTERN = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 
 

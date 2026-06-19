@@ -28,11 +28,20 @@ export interface EngineStatus {
   progress: number | null;
   // Populated when state === "error".
   detail: string | null;
-  // Whether the engine has a downloadable model that can be deleted.
-  manageable: boolean;
+}
+
+// A downloadable model (voice engine, transcriber) and its on-disk footprint.
+export interface ManagedModel {
+  key: string;
+  label: string;
+  repo_id: string;
+  downloaded: boolean;
+  path: string | null;
+  size_bytes: number;
 }
 
 export interface DeletedModel {
+  key: string;
   repo_id: string;
   found: boolean;
   freed_bytes: number;

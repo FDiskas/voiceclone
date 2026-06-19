@@ -2,6 +2,7 @@ import type {
   CreateProfileInput,
   DeletedModel,
   EngineStatus,
+  ManagedModel,
   Profile,
   SynthesizeInput,
 } from "./types";
@@ -43,10 +44,28 @@ export async function getEngineStatus(): Promise<EngineStatus> {
   return response.json();
 }
 
-// Deletes the downloaded model from the local cache. It re-downloads on the
-// next warm-up (next launch, or the next synthesis).
-export async function deleteEngineModel(): Promise<DeletedModel> {
-  const response = await fetch(`${API_BASE}/api/engine/model`, { method: "DELETE" });
+// Begins downloading + loading the model (idempotent). Returns the status at
+// the moment the request is acknowledged — the UI then polls for progress.
+export async function warmupEngine(): Promise<EngineStatus> {
+  const response = await fetch(`${API_BASE}/api/engine/warmup`, { method: "POST" });
+  if (!response.ok) await readError(response);
+  return response.json();
+}
+
+// Lists every downloadable model (voice engine, transcriber) with its on-disk
+// path and size, for the settings page.
+export async function listModels(): Promise<ManagedModel[]> {
+  const response = await fetch(`${API_BASE}/api/models`);
+  if (!response.ok) await readError(response);
+  return response.json();
+}
+
+// Deletes one model's weights from the local cache by key. It re-downloads the
+// next time that model is used.
+export async function deleteModel(key: string): Promise<DeletedModel> {
+  const response = await fetch(`${API_BASE}/api/models/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
   if (!response.ok) await readError(response);
   return response.json();
 }

@@ -53,28 +53,44 @@ def capture_download_progress(on_progress: ProgressCallback) -> Iterator[None]:
         restore()
 
 
-class _ByteTracker:
-    """Aggregates byte counts across every download bar into one fraction.
+_BYTE_UNIT = "B"
 
-    huggingface_hub may open one progress bar per file (older versions) or one
-    shared aggregate bar (newer). We retain each bar's last `n` even after it
-    closes so the total stays monotonic across the download.
+
+class _ByteTracker:
+    """Aggregates download progress across every bar into one fraction.
+
+    huggingface_hub may open one progress bar per file (older versions) or, with
+    newer versions, a shared byte bar (`unit="B"`) alongside a "Fetching N
+    files" *count* bar. Summing both mixes units (files + bytes) and pins the
+    fraction near zero while the one large weights file downloads, so when any
+    byte bar is active we report byte progress alone and ignore the count bars.
+    Each bar's last `n` is retained after it closes so the total stays monotonic.
     """
 
     def __init__(self, on_progress: ProgressCallback) -> None:
         self._on_progress = on_progress
         self._lock = threading.Lock()
-        self._downloaded: dict[int, int] = {}
-        self._total: dict[int, int] = {}
+        self._bars: dict[int, _BarState] = {}
 
-    def update(self, bar_id: int, n: int, total: int) -> None:
+    def update(self, bar_id: int, n: int, total: int, unit: str) -> None:
         with self._lock:
-            self._downloaded[bar_id] = n
-            if total:
-                self._total[bar_id] = total
-            downloaded = sum(self._downloaded.values())
-            total_sum = sum(self._total.values())
+            self._bars[bar_id] = _BarState(n=n, total=total, is_bytes=unit == _BYTE_UNIT)
+            bars = list(self._bars.values())
+        relevant = [b for b in bars if b.is_bytes] or bars
+        downloaded = sum(b.n for b in relevant)
+        total_sum = sum(b.total for b in relevant if b.total)
         self._on_progress(downloaded, total_sum)
+
+
+class _BarState:
+    """One tqdm bar's last-seen counts and whether it measures bytes."""
+
+    __slots__ = ("n", "total", "is_bytes")
+
+    def __init__(self, n: int, total: int, is_bytes: bool) -> None:
+        self.n = n
+        self.total = total
+        self.is_bytes = is_bytes
 
 
 def _patch_update(cls: type, tracker: _ByteTracker) -> Callable[[], None]:
@@ -90,7 +106,12 @@ def _patch_update(cls: type, tracker: _ByteTracker) -> Callable[[], None]:
     def update(self, n=1):  # noqa: ANN001 - mirror tqdm's signature
         result = original(self, n)
         try:
-            tracker.update(id(self), int(self.n or 0), int(self.total or 0))
+            tracker.update(
+                id(self),
+                int(self.n or 0),
+                int(self.total or 0),
+                getattr(self, "unit", "") or "",
+            )
         except Exception:  # noqa: BLE001 - never let reporting break a download
             pass
         return result

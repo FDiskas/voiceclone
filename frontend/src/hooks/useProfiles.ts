@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { deleteProfile, listProfiles } from "../api/client";
 import type { Profile } from "../api/types";
@@ -36,9 +36,8 @@ export function useProfiles(): Profiles {
     [refresh],
   );
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
+  // Note: this hook does not self-load on mount. The backend is often still
+  // starting then, so the caller (App) triggers `refresh` once the backend is
+  // reachable — and again on every reconnect.
   return { profiles, loading, error, refresh, remove };
 }

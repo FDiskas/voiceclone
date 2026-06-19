@@ -21,12 +21,17 @@ omnivoice = [
     "torchaudio",
     # Faster weight downloads from Xet-backed HF repos (optional perf).
     "hf_xet",
+    # >=0.34 emits an aggregate byte progress bar during snapshot downloads, so
+    # the UI shows true byte-level % (older versions fall back to file counts).
+    "huggingface_hub>=0.34",
 ]
 # Whisper auto-transcription (optional; ENGINE-independent).
 whisper = [
     "faster-whisper>=1.0",
     # Faster Whisper model downloads from Xet-backed HF repos (optional perf).
     "hf_xet",
+    # See note in [omnivoice] — byte-level download progress.
+    "huggingface_hub>=0.34",
 ]
 dev = [
     "pytest>=8.0",
