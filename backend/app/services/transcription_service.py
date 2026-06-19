@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..audio.converter import normalize_to_wav
+from ..cancellation import CancellationToken
 from ..transcription.base import Transcriber
 
 AudioNormalizer = Callable[[Path, Path], Path]
@@ -20,7 +21,11 @@ class TranscriptionService:
         self._normalize = normalize
 
     def transcribe(
-        self, audio_bytes: bytes, original_filename: str, language: str | None = None
+        self,
+        audio_bytes: bytes,
+        original_filename: str,
+        language: str | None = None,
+        cancel: CancellationToken | None = None,
     ) -> str:
         suffix = Path(original_filename).suffix or ".bin"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as raw:
@@ -29,7 +34,7 @@ class TranscriptionService:
         wav_path = raw_path.with_suffix(".wav")
         try:
             self._normalize(raw_path, wav_path)
-            return self._transcriber.transcribe(wav_path, language)
+            return self._transcriber.transcribe(wav_path, language, cancel)
         finally:
             raw_path.unlink(missing_ok=True)
             wav_path.unlink(missing_ok=True)

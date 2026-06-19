@@ -5,10 +5,12 @@ from __future__ import annotations
 import struct
 from typing import Iterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response, StreamingResponse
 
+from ..cancellation import OperationCancelled
 from ..services.synthesis_service import SynthesisService
+from .cancellation import run_cancelling_on_disconnect
 from .dependencies import get_synthesis_service
 from .schemas import SynthesisRequestBody
 
@@ -16,14 +18,25 @@ router = APIRouter(prefix="/api/profiles", tags=["synthesis"])
 
 _FRAME_HEADER = struct.Struct(">I")  # 4-byte big-endian length prefix per chunk
 
+# Nginx's "client closed request" code: the response body is moot (the client
+# is gone) but it records that we stopped on purpose rather than failed.
+_CLIENT_CLOSED_REQUEST = 499
+
 
 @router.post("/{profile_id}/speech")
-def synthesize_speech(
+async def synthesize_speech(
     profile_id: str,
     body: SynthesisRequestBody,
+    request: Request,
     synthesis: SynthesisService = Depends(get_synthesis_service),
 ) -> Response:
-    wav_bytes = synthesis.synthesize(profile_id, body.text, body.speed)
+    try:
+        wav_bytes = await run_cancelling_on_disconnect(
+            request,
+            lambda cancel: synthesis.synthesize(profile_id, body.text, body.speed, cancel),
+        )
+    except OperationCancelled:
+        return Response(status_code=_CLIENT_CLOSED_REQUEST)
     return Response(content=wav_bytes, media_type="audio/wav")
 
 

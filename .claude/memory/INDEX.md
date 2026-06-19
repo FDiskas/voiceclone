@@ -18,6 +18,7 @@
 - [model-management](decisions/model-management.md) — ManagedModel capability (voice+whisper), opt-in download via button, /api/models endpoints, HF cache helper, byte-level progress. keywords: models, delete, download, warmup, huggingface, cache, registry, settings, progress
 - [macos-unsigned-quarantine](decisions/macos-unsigned-quarantine.md) — app ships UNSIGNED; quarantine can't be stripped in CI (added client-side on download); users run xattr or "Open Anyway". keywords: macos, codesign, notarization, quarantine, gatekeeper, xattr, unsigned
 - [release-versioning](decisions/release-versioning.md) — single version source is frontend/package.json; tauri.conf.json version → ../package.json, so `pnpm version patch` drives built app version + git tag. keywords: version, release, pnpm, tauri, git-tag, bump
+- [backend-cancellation](decisions/backend-cancellation.md) — sync synth/transcribe cancel cooperatively on client disconnect (token + is_disconnected watcher, 499); whole-synthesis loops per-sentence to allow it. keywords: cancel, abort, disconnect, stop, gpu, threadpool, cooperative
 - [tauri-packaging-gotchas](decisions/tauri-packaging-gotchas.md) — backend data dir must come from Tauri app_data_dir (onefile __file__ is ephemeral → 404/no persistence); downloads need native save (WKWebView ignores <a download>). keywords: tauri, pyinstaller, onefile, data_dir, persistence, 404, download, wkwebview, save
 
 ## developer/

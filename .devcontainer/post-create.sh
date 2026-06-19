@@ -13,6 +13,7 @@ echo "==> Backend: virtualenv + dependencies"
 python -m venv backend/.venv
 backend/.venv/bin/pip install --upgrade pip
 backend/.venv/bin/pip install -e "./backend[dev]"
+backend/.venv/bin/pip install -e "./backend[dev]"
 
 echo "==> Frontend: pnpm install"
 (cd frontend && pnpm install)

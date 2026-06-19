@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from ..cancellation import CancellationToken, raise_if_cancelled
 from ..models import huggingface_cache
 from ..models.managed_model import DeletedModel, ModelInfo
 
@@ -82,7 +83,18 @@ class WhisperTranscriber:
         )
         return self._model
 
-    def transcribe(self, audio_path: Path, language: str | None = None) -> str:
+    def transcribe(
+        self,
+        audio_path: Path,
+        language: str | None = None,
+        cancel: CancellationToken | None = None,
+    ) -> str:
         model = self._load()
+        # faster-whisper decodes lazily as `segments` is iterated, so this loop
+        # is where the work actually happens — and the place to honour a cancel.
         segments, _ = model.transcribe(str(audio_path), language=language)
-        return " ".join(segment.text.strip() for segment in segments).strip()
+        parts: list[str] = []
+        for segment in segments:
+            raise_if_cancelled(cancel)
+            parts.append(segment.text.strip())
+        return " ".join(parts).strip()

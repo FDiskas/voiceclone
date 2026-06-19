@@ -10,9 +10,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
+from ..cancellation import CancellationToken
+
 
 class Transcriber(Protocol):
     """Produces text from a spoken-audio file."""
 
-    def transcribe(self, audio_path: Path, language: str | None = None) -> str:
+    def transcribe(
+        self,
+        audio_path: Path,
+        language: str | None = None,
+        cancel: CancellationToken | None = None,
+    ) -> str:
         ...
